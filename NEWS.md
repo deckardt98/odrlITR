@@ -1,4 +1,4 @@
-# odrl 0.1.0
+# odrlITR 0.1.0
 
 * Initial package release.
 * Added cross-fitted Super Learner and user-supplied nuisance interfaces.

@@ -82,7 +82,7 @@ test_that("score rejects a nuisance object with mismatched treatment coding", {
   nuisance <- odrl_nuisance_user(
     m = rep(0, 8), pi = 0.5, out_of_fold = TRUE
   )
-  nuisance$treatment_map <- odrl:::.odrl_encode_treatment(
+  nuisance$treatment_map <- odrlITR:::.odrl_encode_treatment(
     a, positive = "treated"
   )
   expect_error(

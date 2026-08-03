@@ -3,7 +3,7 @@ test_that("direct affine MILP passes sign and objective audit", {
   x <- matrix(c(-2, -1, 1, 2), ncol = 1,
               dimnames = list(NULL, "x"))
   score <- c(-2, -1, 1, 2)
-  fit <- odrl:::.odrl_fit_linear(
+  fit <- odrlITR:::.odrl_fit_linear(
     x, score,
     odrl_control(linear_time_limit = 10, linear_relative_gap = 0)
   )
@@ -39,7 +39,7 @@ test_that("policy tree resolves tied leaf rewards to positive treatment", {
   skip_if_not_installed("policytree")
   x <- matrix(1:4, ncol = 1)
   score <- c(-2, -1, 1, 2)
-  fit <- odrl:::.odrl_fit_tree(
+  fit <- odrlITR:::.odrl_fit_tree(
     x, score,
     odrl_control(tree_depth = 0, tree_min_node_size = 1)
   )

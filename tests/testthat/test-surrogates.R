@@ -29,8 +29,8 @@ test_that("bounded Gaussian hinge scores are globally bounded", {
   score <- predict(fit, newx, type = "score")
   expect_lte(max(abs(score)), 1 + 1e-8)
   expect_true(fit$policy$diagnostics$globally_bounded)
-  z <- odrl:::.odrl_standardize_apply(newx, fit$policy$transform)
-  raw <- odrl:::.odrl_predict_kernel_unclipped(
+  z <- odrlITR:::.odrl_standardize_apply(newx, fit$policy$transform)
+  raw <- odrlITR:::.odrl_predict_kernel_unclipped(
     fit$policy$fit, z, fit$policy$kernel
   )
   expect_lte(max(abs(raw)), fit$policy$fit$radius + 1e-8)
@@ -69,11 +69,11 @@ test_that("ReLU supports bounded hinge and logistic losses", {
 test_that("hinge ReLU initializes inside its active region", {
   x <- matrix(c(rep(-2, 10), rep(2, 90)), ncol = 1)
   score <- c(rep(-1, 10), rep(1, 90))
-  fit <- odrl:::.odrl_fit_relu_candidate(
+  fit <- odrlITR:::.odrl_fit_relu_candidate(
     x, score, hidden = 0, decay = 0.001, loss = "hinge",
     restarts = 1, maxit = 200, seed = 19
   )
-  action <- ifelse(odrl:::.odrl_predict_relu_raw(fit, x) >= 0, 1, -1)
+  action <- ifelse(odrlITR:::.odrl_predict_relu_raw(fit, x) >= 0, 1, -1)
   expect_equal(fit$convergence, 0L)
   expect_lte(mean(action != sign(score)), 0.01)
 })

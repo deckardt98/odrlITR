@@ -60,7 +60,7 @@ test_that("known propensity permits imbalanced arms in pooled m fitting", {
 })
 
 test_that("captured Super Learner warnings remain auditable", {
-  captured <- odrl:::.odrl_capture_warnings({
+  captured <- odrlITR:::.odrl_capture_warnings({
     warning("deliberate test warning")
     7
   })

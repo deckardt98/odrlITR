@@ -1,4 +1,4 @@
-Package: odrl
+Package: odrlITR
 Type: Package
 Title: Orthogonal Double Residual Learning for Treatment Rules
 Version: 0.1.0
@@ -17,9 +17,9 @@ Description: Learns individualized treatment rules with the orthogonal double
     keeps nuisance estimation, policy optimization, tuning, and prediction in
     separate, auditable components.
 License: MIT + file LICENSE
-URL: https://github.com/deckardt98/odrl,
-    https://deckardt98.github.io/odrl/
-BugReports: https://github.com/deckardt98/odrl/issues
+URL: https://github.com/deckardt98/odrlITR,
+    https://deckardt98.github.io/odrlITR/
+BugReports: https://github.com/deckardt98/odrlITR/issues
 Encoding: UTF-8
 Language: en-US
 Depends:

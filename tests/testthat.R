@@ -1,4 +1,4 @@
 library(testthat)
-library(odrl)
+library(odrlITR)
 
-test_check("odrl")
+test_check("odrlITR")

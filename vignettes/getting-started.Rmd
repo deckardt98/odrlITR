@@ -1,8 +1,8 @@
 ---
-title: "Getting started with odrl"
+title: "Getting started with odrlITR"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Getting started with odrl}
+  %\VignetteIndexEntry{Getting started with odrlITR}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -13,7 +13,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 ## Method and coding convention
 
-`odrl` internally represents treatment by (A\in\{-1,+1\}), with larger
+`odrlITR` internally represents treatment by (A\in\{-1,+1\}), with larger
 outcomes preferred. It estimates
 
 \[
@@ -39,7 +39,7 @@ criteria are evaluated on the original score scale.
 ## A reproducible example
 
 ```{r simulate}
-library(odrl)
+library(odrlITR)
 set.seed(1)
 dat <- odrl_simulate(n = 300, boundary = "tree", seed = 1)
 known <- odrl_nuisance_user(

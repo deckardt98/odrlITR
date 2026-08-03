@@ -1,10 +1,10 @@
-# odrl
+# odrlITR
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/deckardt98/odrl/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/deckardt98/odrl/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/deckardt98/odrlITR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/deckardt98/odrlITR/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-`odrl` implements **orthogonal double residual learning** for binary
+`odrlITR` implements **orthogonal double residual learning** for binary
 individualized treatment rules. The name is short, searchable, and matches the
 method used in the paper without tying the software to one optimizer or policy
 class.
@@ -21,10 +21,10 @@ The package separates two stages:
 ```r
 # Once the repository is public:
 # install.packages("pak")
-# pak::pak("deckardt98/odrl")
+# pak::pak("deckardt98/odrlITR")
 
 # From a downloaded CRAN-style source archive:
-install.packages("odrl_0.1.0.tar.gz", repos = NULL, type = "source")
+install.packages("odrlITR_0.1.0.tar.gz", repos = NULL, type = "source")
 ```
 
 Optional engines are installed only when needed:
@@ -38,7 +38,7 @@ install.packages(c("SuperLearner", "glmnet", "policytree", "highs"))
 ### Built-in cross-fitted Super Learner
 
 ```r
-library(odrl)
+library(odrlITR)
 
 fit <- odrl(
   x = x,
@@ -147,7 +147,7 @@ control <- odrl_control(
   orthogonality property, but the package does not claim the manuscript's
   sparse deep-network rate for this particular optimizer.
 
-See `vignette("getting-started", package = "odrl")` for a complete workflow.
+See `vignette("getting-started", package = "odrlITR")` for a complete workflow.
 
 ## Development status
 
