@@ -1,0 +1,16 @@
+^odrl\.Rproj$
+^\.Rproj\.user$
+^\.github$
+^README\.Rmd$
+^cran-comments\.md$
+^CONTRIBUTING\.md$
+^CODE_OF_CONDUCT\.md$
+^LICENSE\.md$
+^\.git$
+^\.gitignore$
+^docs$
+^pkgdown$
+^_pkgdown\.yml$
+^dist$
+\.tar\.gz$
+\.zip$

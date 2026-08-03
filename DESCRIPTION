@@ -1,0 +1,40 @@
+Package: odrl
+Type: Package
+Title: Orthogonal Double Residual Learning for Treatment Rules
+Version: 0.1.0
+Authors@R: c(
+    person("Jiaqi", "Tong", email = "jiaqi.tong@yale.edu",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0009-0005-8922-3386")),
+    person("Fan", "Li", role = "aut")
+  )
+Description: Learns individualized treatment rules with the orthogonal double
+    residual loss. First-stage propensity and marginal outcome regressions may
+    be estimated by cross-fitted Super Learner or supplied directly by the
+    user. The second stage supports direct optimization over linear rules and
+    shallow decision trees, as well as hinge- and logistic-loss relaxation
+    over kernel and rectified-linear-unit score classes. The implementation
+    keeps nuisance estimation, policy optimization, tuning, and prediction in
+    separate, auditable components.
+License: MIT + file LICENSE
+URL: https://github.com/deckardt98/odrl,
+    https://deckardt98.github.io/odrl/
+BugReports: https://github.com/deckardt98/odrl/issues
+Encoding: UTF-8
+Language: en-US
+Depends:
+    R (>= 4.1.0)
+Imports:
+    stats
+Suggests:
+    glmnet,
+    highs,
+    knitr,
+    policytree,
+    rmarkdown,
+    SuperLearner,
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Config/testthat/edition: 3

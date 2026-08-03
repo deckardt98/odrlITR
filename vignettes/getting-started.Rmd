@@ -1,0 +1,179 @@
+---
+title: "Getting started with odrl"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with odrl}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Method and coding convention
+
+`odrl` internally represents treatment by (A\in\{-1,+1\}), with larger
+outcomes preferred. It estimates
+
+\[
+e(x)=E(A\mid X=x), \qquad m(x)=E(Y\mid X=x),
+\]
+
+and forms the pooled out-of-fold score
+
+\[
+\widehat Z_i=\{A_i-\widehat e(X_i)\}
+              \{Y_i-\widehat m(X_i)\}.
+\]
+
+The direct learners minimize weighted policy error, equivalently maximizing
+\(\sum_i \widehat Z_i d(X_i)\). The surrogate learners minimize weighted hinge
+or logistic loss using labels `sign(Z)` and weights `abs(Z)`.
+
+For conditioning and comparable penalty grids, the second stage divides
+\(\widehat Z\) by its sample mean absolute value. This is a positive rescaling:
+it leaves the unpenalized binary policy objective unchanged. Reported training
+criteria are evaluated on the original score scale.
+
+## A reproducible example
+
+```{r simulate}
+library(odrl)
+set.seed(1)
+dat <- odrl_simulate(n = 300, boundary = "tree", seed = 1)
+known <- odrl_nuisance_user(
+  m = dat$m,
+  pi = dat$pi,
+  source = "known simulation truth",
+  out_of_fold = TRUE
+)
+```
+
+The following tree fit is evaluated only when the optional engine is present.
+
+```{r tree}
+if (requireNamespace("policytree", quietly = TRUE)) {
+  tree_fit <- odrl(dat$x, dat$a, dat$y, learner = "tree",
+                   nuisance = known,
+                   control = odrl_control(tree_depth = 2, seed = 10))
+  tree_fit
+  head(predict(tree_fit, dat$x))
+}
+```
+
+The package also includes a self-contained bounded-hinge Gaussian-kernel
+learner:
+
+```{r svm}
+svm_fit <- odrl(
+  dat$x, dat$a, dat$y,
+  learner = "svm", loss = "hinge", nuisance = known,
+  control = odrl_control(
+    svm_rbf_multiplier = c(0.5, 1, 2),
+    svm_radius = c(0.5, 1),
+    svm_folds = 3,
+    seed = 11
+  )
+)
+svm_fit$policy$selected
+range(predict(svm_fit, dat$x, type = "score"))
+```
+
+The Gaussian learner constructs and stores a dense \(n \times n\) kernel
+matrix, so both fitting time and memory scale at least quadratically with the
+training sample size. Prediction also evaluates the kernel against every
+training observation. For large data sets, first benchmark this learner on a
+representative subset or use the affine, tree, or ReLU policy class.
+
+For logistic kernel fits, both the constant offset and the RKHS component are
+included in the quadratic penalty.
+
+## Cross-fitted Super Learner
+
+With `nuisance = NULL` (the default), `odrl()` calls
+`odrl_nuisance_sl()`. Super Learner's internal CV is nested inside the outer
+cross-fitting loop. For example:
+
+```{r superlearner, eval=FALSE}
+fit <- odrl(
+  x, treatment, outcome,
+  learner = "relu", loss = "logistic",
+  nuisance_folds = 5,
+  sl_inner_folds = 5,
+  sl.library = c("SL.mean", "SL.glm", "SL.glmnet")
+)
+```
+
+The two nuisance libraries may be specified separately through
+`sl.library.pi` and `sl.library.m`. For a randomized trial, `known_pi` (or
+`known_e`) skips propensity fitting but preserves outer cross-fitting for the
+marginal outcome regression:
+
+```{r known-propensity, eval=FALSE}
+fit <- odrl(
+  x, treatment, outcome,
+  learner = "tree",
+  known_pi = 0.5,
+  sl.library.m = c("SL.mean", "SL.glm", "SL.glmnet")
+)
+```
+
+Custom wrappers can be supplied in `sl.library`, with `sl_env` identifying the
+environment in which Super Learner should resolve them.
+
+The returned nuisance object preserves the libraries, coefficients, actual
+inner-fold counts, and captured warning messages for each outer fold in
+`nuisance$fits`; `nuisance$warnings` is the deduplicated warning ledger.
+
+## User nuisance contract
+
+Externally estimated predictions must align with training rows. Unless known
+by design, they should be out of fold. The package warns when an object is not
+marked out of fold:
+
+```{r user, eval=FALSE}
+nuisance <- odrl_nuisance_user(
+  m = m_hat_oof,
+  e = e_hat_oof,
+  fold_id = fold_id,
+  source = "external learner",
+  out_of_fold = TRUE
+)
+fit <- odrl(x, a, y, learner = "linear", nuisance = nuisance)
+```
+
+No clipping is applied unless `propensity_bounds` is set explicitly. The
+fitted nuisance object records the raw probability range and clipped fraction.
+
+## Optimization diagnostics
+
+The direct affine learner may stop with a feasible incumbent before proving
+the requested MIP gap. The fitted object records the distinction:
+
+```{r linear, eval=FALSE}
+fit <- odrl(
+  x, a, y, learner = "linear", nuisance = nuisance,
+  control = odrl_control(
+    linear_time_limit = 600,
+    linear_relative_gap = 0.01,
+    linear_require_gap = FALSE
+  )
+)
+fit$policy$diagnostics
+```
+
+`linear_require_gap = TRUE` requires the requested relative gap. To request a
+numerical global-optimum certificate within the bounded-margin standardized
+affine class, combine it with `linear_relative_gap = 0` and inspect
+`certified_global_optimum` in the returned diagnostics.
+
+`coef(fit)` returns affine coefficients on the original encoded-covariate
+scale; use `coef(fit, standardized = TRUE)` for the internally standardized
+coefficients. For trees, `split.step = 1` searches all candidate split points
+admitted by `policytree`; larger values deliberately thin that candidate set.
+
+The ReLU engine implemented here is a regularized one-hidden-layer subclass
+with an optional affine candidate. Hard-tanh bounding gives its hinge score the
+universal-orthogonality property, but this implementation does not claim the
+manuscript's sparse deep-network entropy rate.

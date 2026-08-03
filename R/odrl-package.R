@@ -1,0 +1,11 @@
+#' Orthogonal Double Residual Learning
+#'
+#' The `odrl` package learns binary individualized treatment rules from the
+#' cross-fitted signed score
+#' \deqn{\widehat Z_i = \{A_i-\widehat e(X_i)\}
+#'       \{Y_i-\widehat m(X_i)\},}
+#' where treatment is internally coded as \eqn{A\in\{-1,+1\}},
+#' \eqn{e(x)=E(A\mid X=x)}, and \eqn{m(x)=E(Y\mid X=x)}.
+#'
+#' @keywords internal
+"_PACKAGE"

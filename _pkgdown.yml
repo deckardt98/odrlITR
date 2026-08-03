@@ -1,0 +1,22 @@
+url: https://deckardt98.github.io/odrl/
+template:
+  bootstrap: 5
+reference:
+  - title: Fit treatment rules
+    contents:
+      - odrl
+      - odrl_formula
+      - odrl_control
+  - title: Nuisance estimation
+    contents:
+      - odrl_nuisance_sl
+      - odrl_nuisance_user
+  - title: Methods and utilities
+    contents:
+      - predict.odrl_fit
+      - fitted.odrl_fit
+      - print.odrl_fit
+      - summary.odrl_fit
+      - coef.odrl_fit
+      - odrl_score
+      - odrl_simulate

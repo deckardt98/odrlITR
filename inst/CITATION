@@ -1,0 +1,24 @@
+citHeader("To cite odrl in publications, use:")
+
+bibentry(
+  bibtype = "Manual",
+  title = "odrl: Orthogonal Double Residual Learning for Treatment Rules",
+  author = c(
+    person("Jiaqi", "Tong"),
+    person("Fan", "Li")
+  ),
+  year = "2026",
+  note = "R package version 0.1.0",
+  url = "https://github.com/deckardt98/odrl"
+)
+
+bibentry(
+  bibtype = "Unpublished",
+  title = "Orthogonal double residual learning for estimating individualized treatment rules",
+  author = c(
+    person("Jiaqi", "Tong"),
+    person("Fan", "Li")
+  ),
+  year = "2026",
+  note = "Manuscript"
+)
