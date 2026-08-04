@@ -1,7 +1,13 @@
 # odrlITR 0.1.0
 
 * Initial package release.
-* Added cross-fitted Super Learner and user-supplied nuisance interfaces.
-* Added direct linear-rule and shallow-tree policy optimization.
-* Added bounded-hinge and logistic kernel learners.
-* Added bounded-hinge and logistic ReLU learners with criterion-based tuning.
+* Added configurable, treatment-stratified cross-fitting for Super Learner and
+  built-in parametric nuisance models, plus user-specified fold assignments and
+  user-supplied nuisance predictions.
+* Added direct linear-rule optimization with auditable HiGHS stopping controls
+  and shallow-tree optimization through `policytree` or custom backends.
+* Added hinge, logistic, squared-hinge, and custom differentiable surrogate
+  losses for linear, Gaussian, polynomial, and custom RKHS kernels.
+* Added affine, shallow, and multilayer neural policies with common activation
+  functions, criterion-based tuning, custom losses, and external backend
+  callbacks.

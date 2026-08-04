@@ -10,6 +10,7 @@ reference:
   - title: Nuisance estimation
     contents:
       - odrl_nuisance_sl
+      - odrl_nuisance_parametric
       - odrl_nuisance_user
   - title: Methods and utilities
     contents:

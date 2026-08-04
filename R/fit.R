@@ -11,26 +11,99 @@
   ), class = "odrl_policy_constant")
 }
 
+.odrl_canonical_loss_name <- function(loss) {
+  name <- tolower(gsub("-", "_", loss, fixed = TRUE))
+  switch(name,
+    logit = "logistic",
+    squaredhinge = "squared_hinge",
+    sq_hinge = "squared_hinge",
+    name
+  )
+}
+
+.odrl_prepare_loss <- function(learner, loss) {
+  if (learner %in% c("tree", "linear")) {
+    if (is.null(loss)) loss <- "exact"
+    if (!is.character(loss) || length(loss) != 1L || is.na(loss) ||
+        !identical(tolower(loss), "exact")) {
+      .odrl_abort("Direct tree and linear learners require `loss = \"exact\"`.")
+    }
+    return(list(fit = "exact", label = "exact"))
+  }
+  if (is.null(loss)) loss <- "hinge"
+  if (learner == "svm") {
+    specification <- .odrl_resolve_surrogate_loss(loss)
+    return(list(fit = specification, label = specification$name))
+  }
+  if (is.character(loss)) {
+    if (length(loss) != 1L || is.na(loss)) {
+      .odrl_abort("`loss` must be one supported surrogate-loss name.")
+    }
+    name <- .odrl_canonical_loss_name(loss)
+    if (!name %in% c("hinge", "logistic", "squared_hinge")) {
+      .odrl_abort(
+        "Unknown neural-network surrogate loss: ", loss, ". Use `\"hinge\"`, ",
+        "`\"logistic\"`, `\"squared_hinge\"`, or a custom loss."
+      )
+    }
+    return(list(fit = name, label = name))
+  }
+  if (is.list(loss) ||
+      (is.function(loss) &&
+       is.function(attr(loss, "gradient", exact = TRUE)))) {
+    specification <- .odrl_resolve_surrogate_loss(loss)
+    custom <- function(margin) {
+      list(
+        loss = specification$value(margin),
+        gradient = specification$gradient(margin)
+      )
+    }
+    attr(custom, "name") <- specification$name
+    return(list(fit = custom, label = specification$name))
+  }
+  if (is.function(loss)) {
+    .odrl_relu_custom_loss(loss, c(-1, 0, 1))
+    return(list(fit = loss, label = .odrl_relu_loss_name(loss)))
+  }
+  .odrl_abort(
+    "A custom neural-network loss must be a function or a list with ",
+    "`value` and `gradient` functions."
+  )
+}
+
 #' Fit an orthogonal double-residual treatment rule
 #'
 #' `odrl()` estimates or accepts the two ODRL nuisances, constructs pooled
 #' out-of-fold double-residual scores, and fits one policy. The direct learners
 #' optimize the empirical binary objective over a bounded-margin affine class
 #' or the candidate shallow-tree class searched by `policytree`.
-#' The surrogate learners use bounded hinge or logistic loss with a Gaussian
-#' kernel or a one-hidden-layer ReLU score.
+#' Surrogate learners support hinge, logistic, squared-hinge, and custom
+#' differentiable margin losses over configurable RKHS or neural-network score
+#' classes.
 #'
 #' @param x Covariate matrix or data frame.
 #' @param a Binary treatment. Numeric values may be `{0,1}` or `{-1,+1}`.
 #' @param y Numeric outcome, with larger values preferred.
 #' @param learner One of `"tree"`, `"linear"`, `"svm"`, or `"relu"`.
-#' @param loss `"exact"` for tree/linear or `"hinge"`/`"logistic"` for
-#'   SVM/ReLU. If `NULL`, direct learners use exact loss and surrogate learners
-#'   use bounded hinge.
-#' @param nuisance `NULL`/`"superlearner"` for built-in cross-fitting, an
-#'   [odrl_nuisance_user()] object, a list containing `m` plus `pi` or `e`, or
-#'   a function `function(x, a, y)` returning one of those objects.
-#' @param nuisance_folds Outer nuisance cross-fitting folds.
+#' @param loss `"exact"` for tree/linear; `"hinge"`, `"logistic"`, or
+#'   `"squared_hinge"` for SVM/neural learners; or a custom differentiable
+#'   signed-margin loss. SVM custom losses use a list with `value` and
+#'   `gradient` functions. Neural custom losses may use the same list or a
+#'   function returning `list(loss, gradient)`. If `NULL`, direct learners use
+#'   exact loss and surrogate learners use hinge loss. The caller is
+#'   responsible for the mathematical properties of a custom loss, including
+#'   convexity when a convex kernel-surrogate problem is intended.
+#' @param nuisance `NULL`/`"superlearner"` for cross-fitted Super Learner,
+#'   `"parametric"`/`"glm"` for cross-fitted logistic treatment and linear
+#'   outcome models, an [odrl_nuisance_user()] object, a list containing `m`
+#'   plus `pi` or `e`, or a function `function(x, a, y)` returning one of those
+#'   objects.
+#' @param nuisance_folds Number of outer nuisance cross-fitting folds.
+#' @param nuisance_fold_id Optional row-aligned user-specified outer-fold
+#'   identifiers. When omitted, built-in folds are treatment-stratified and
+#'   balanced to differ in total size by at most one row. User folds must leave
+#'   at least two observations in every outer training set and, when the
+#'   propensity is estimated, at least two observations from each arm.
 #' @param sl.library Library passed to [odrl_nuisance_sl()].
 #' @param sl.library.pi Optional propensity-specific Super Learner library.
 #' @param sl.library.m Optional marginal-outcome-specific Super Learner library.
@@ -94,17 +167,12 @@ odrl <- function(
     positive = NULL,
     control = odrl_control(),
     sl_verbose = FALSE,
-    sl_env = parent.frame()) {
+    sl_env = parent.frame(),
+    nuisance_fold_id = NULL) {
   call <- match.call()
   learner <- match.arg(learner)
   control <- .odrl_validate_control(control)
-  allowed_loss <- if (learner %in% c("tree", "linear")) {
-    "exact"
-  } else {
-    c("hinge", "logistic")
-  }
-  if (is.null(loss)) loss <- allowed_loss[[1L]]
-  loss <- match.arg(loss, allowed_loss)
+  loss_specification <- .odrl_prepare_loss(learner, loss)
   encoded <- .odrl_encode_x_fit(x)
   x_matrix <- encoded$x
   a_info <- .odrl_encode_treatment(a, positive = positive)
@@ -119,7 +187,8 @@ odrl <- function(
     sl.library.pi = sl.library.pi, sl.library.m = sl.library.m,
     sl_inner_folds = sl_inner_folds, propensity_bounds = propensity_bounds,
     known_pi = known_pi, known_e = known_e, seed = control$seed,
-    positive = positive, sl_verbose = sl_verbose, sl_env = sl_env
+    positive = positive, sl_verbose = sl_verbose, sl_env = sl_env,
+    nuisance_fold_id = nuisance_fold_id
   )
   if (length(nuisance_fit$m) != nrow(x_matrix)) {
     .odrl_abort("Nuisance predictions do not match the training rows.")
@@ -150,15 +219,19 @@ odrl <- function(
       learner,
       tree = .odrl_fit_tree(x_matrix, optimization_score, control),
       linear = .odrl_fit_linear(x_matrix, optimization_score, control),
-      svm = .odrl_fit_svm(x_matrix, optimization_score, control, loss),
-      relu = .odrl_fit_relu(x_matrix, optimization_score, control, loss)
+      svm = .odrl_fit_svm(
+        x_matrix, optimization_score, control, loss_specification$fit
+      ),
+      relu = .odrl_fit_relu(
+        x_matrix, optimization_score, control, loss_specification$fit
+      )
     )
   }
   elapsed <- proc.time()[["elapsed"]] - started
   structure(list(
     call = call,
     learner = learner,
-    loss = loss,
+    loss = loss_specification$label,
     policy = policy,
     nuisance = nuisance_fit,
     score = score,

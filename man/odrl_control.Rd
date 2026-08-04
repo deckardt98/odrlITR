@@ -27,7 +27,25 @@ odrl_control(
   relu_maxit = 250L,
   relu_selection = c("one_se", "best"),
   score_tolerance = 1e-10,
-  seed = 1L
+  seed = 1L,
+  tree_backend = "policytree",
+  tree_options = list(),
+  linear_absolute_gap = NULL,
+  linear_node_limit = NULL,
+  linear_objective_target = NULL,
+  linear_threads = 1L,
+  linear_log_to_console = FALSE,
+  linear_solver_options = list(),
+  svm_polynomial_degree = 2L,
+  svm_polynomial_scale = 1,
+  svm_polynomial_offset = 1,
+  svm_hinge_mode = c("bounded", "regularized"),
+  svm_kernel_function = NULL,
+  svm_kernel_args = list(),
+  relu_architectures = NULL,
+  relu_activation = "relu",
+  relu_leaky_slope = 0.01,
+  relu_backend = "native"
 )
 }
 \arguments{
@@ -50,9 +68,13 @@ negative affine score. It cannot exceed \code{linear_coefficient_bound}.}
 \item{linear_require_gap}{If \code{TRUE}, reject a feasible incumbent unless the
 solver proves the requested gap.}
 
-\item{svm_kernel}{Either \code{"rbf"} or \code{"linear"}.}
+\item{svm_kernel}{Kernel specification: \code{"rbf"}/\code{"gaussian"}, \code{"linear"},
+\code{"polynomial"}/\code{"poly"}, a function \verb{function(x, y)}, or a list with
+\code{name}, \code{fun}, and optional \code{args}. A custom function must return a finite
+kernel matrix; the caller is responsible for supplying a symmetric
+positive-semidefinite kernel.}
 
-\item{svm_penalty}{Positive penalty grid for logistic kernel fits.}
+\item{svm_penalty}{Positive regularization grid for kernel-surrogate fits.}
 
 \item{svm_rbf_multiplier}{Positive multipliers of the median squared
 pairwise distance.}
@@ -67,7 +89,8 @@ kernel fit. A nonconverged fit is retried once from its incumbent with
 \code{max(3 * svm_maxit, svm_maxit + 100)} iterations.}
 
 \item{relu_hidden_units}{Integer vector of one-hidden-layer widths. Include
-zero to add an affine score candidate.}
+zero to add an affine score candidate. This backward-compatible shortcut
+is ignored when \code{relu_architectures} is supplied.}
 
 \item{relu_decay}{Nonnegative weight-decay grid.}
 
@@ -87,6 +110,58 @@ error rule favoring smaller networks and stronger decay.}
 \item{score_tolerance}{Scores below this absolute value are treated as zero.}
 
 \item{seed}{Reproducible seed used by tuning and optimization.}
+
+\item{tree_backend}{Tree engine. Use \code{"policytree"} or a list containing
+\code{name}, \code{fit}, and \code{predict} callbacks. The fit callback receives \code{x},
+\code{score}, \code{rewards}, \code{depth}, \code{min_node_size}, \code{split_step}, and \code{options};
+the predict callback must return actions in \verb{\{-1,+1\}}.}
+
+\item{tree_options}{Named list of additional options for the tree engine.
+For \code{policytree}, dedicated arguments such as \code{depth} cannot be
+overridden here.}
+
+\item{linear_absolute_gap}{Optional requested absolute mixed-integer gap.}
+
+\item{linear_node_limit}{Optional branch-and-bound node limit.}
+
+\item{linear_objective_target}{Optional solver objective target.}
+
+\item{linear_threads}{Positive number of HiGHS threads.}
+
+\item{linear_log_to_console}{Whether HiGHS prints its solver log.}
+
+\item{linear_solver_options}{Named list of additional HiGHS options. Options
+represented by dedicated arguments cannot be overridden here.}
+
+\item{svm_polynomial_degree}{Positive integer degree grid.}
+
+\item{svm_polynomial_scale}{Positive polynomial-kernel scale.}
+
+\item{svm_polynomial_offset}{Nonnegative polynomial-kernel offset.}
+
+\item{svm_hinge_mode}{\code{"bounded"} preserves the globally bounded RBF-hinge
+construction; \code{"regularized"} enables ordinary hinge fitting with any
+supported kernel.}
+
+\item{svm_kernel_function}{Function used with \code{svm_kernel = "custom"}.}
+
+\item{svm_kernel_args}{Named arguments passed to a custom kernel function.}
+
+\item{relu_architectures}{Optional list of hidden-layer width vectors. Use
+\code{integer()} for an affine score, \code{8L} for one hidden layer, and
+\code{c(16L, 8L)} for two hidden layers.}
+
+\item{relu_activation}{Activation grid: \code{"relu"}, \code{"leaky_relu"}, \code{"tanh"},
+\code{"sigmoid"}, or \code{"linear"}.}
+
+\item{relu_leaky_slope}{Negative-side slope for leaky ReLU.}
+
+\item{relu_backend}{\code{"native"} or a list containing \code{name}, \code{fit}, and
+\code{predict} callbacks for an external neural-network engine. The fit
+callback receives \code{x}, \code{score}, \code{architecture}, \code{activation}, \code{decay},
+\code{loss}, \code{restarts}, \code{maxit}, \code{seed}, and \code{leaky_slope}. The predict
+callback is called as \code{predict(model, newx)} and must return one finite
+numerical score per row.}
 }
 \value{
 An object of class \code{odrl_control}.
