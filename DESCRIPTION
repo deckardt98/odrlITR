@@ -1,6 +1,6 @@
 Package: odrlITR
 Type: Package
-Title: Orthogonal Double Residual Learning for Treatment Rules
+Title: Orthogonal Double Residual Learning for Individualized Treatment Rules
 Version: 0.1.0
 Authors@R: c(
     person("Jiaqi", "Tong", email = "jiaqi.tong@yale.edu",
@@ -10,12 +10,12 @@ Authors@R: c(
   )
 Description: Learns individualized treatment rules with the orthogonal double
     residual loss. First-stage propensity and marginal outcome regressions may
-    be estimated by cross-fitted Super Learner or supplied directly by the
-    user. The second stage supports direct optimization over linear rules and
-    shallow decision trees, as well as hinge- and logistic-loss relaxation
-    over kernel and rectified-linear-unit score classes. The implementation
-    keeps nuisance estimation, policy optimization, tuning, and prediction in
-    separate, auditable components.
+    be estimated by cross-fitted Super Learner, cross-fitted parametric models,
+    or supplied directly by the user. The second stage supports exact
+    optimization over linear rules and shallow decision trees, as well as
+    surrogate-loss relaxation over reproducing-kernel Hilbert-space and
+    neural-network score classes. The nuisance, policy, tuning, and prediction
+    interfaces are modular and auditable.
 License: MIT + file LICENSE
 URL: https://github.com/deckardt98/odrlITR,
     https://deckardt98.github.io/odrlITR/

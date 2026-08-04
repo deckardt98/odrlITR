@@ -13,7 +13,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 ## Method and coding convention
 
-`odrlITR` internally represents treatment by (A\in\{-1,+1\}), with larger
+`odrlITR` internally represents treatment by \(A\in\{-1,+1\}\), with larger
 outcomes preferred. It estimates
 
 \[
@@ -28,8 +28,9 @@ and forms the pooled out-of-fold score
 \]
 
 The direct learners minimize weighted policy error, equivalently maximizing
-\(\sum_i \widehat Z_i d(X_i)\). The surrogate learners minimize weighted hinge
-or logistic loss using labels `sign(Z)` and weights `abs(Z)`.
+\(\sum_i \widehat Z_i d(X_i)\). The surrogate learners minimize a weighted
+hinge, logistic, squared-hinge, or user-specified differentiable margin loss
+using labels `sign(Z)` and weights `abs(Z)`.
 
 For conditioning and comparable penalty grids, the second stage divides
 \(\widehat Z\) by its sample mean absolute value. This is a positive rescaling:
@@ -80,6 +81,39 @@ svm_fit$policy$selected
 range(predict(svm_fit, dat$x, type = "score"))
 ```
 
+Set `svm_kernel` to `"linear"`, `"rbf"`, or `"polynomial"`; a custom
+function or a list containing `name`, `fun`, and `args` defines another kernel.
+The globally bounded RKHS-radius construction is specific to Gaussian/RBF
+hinge fitting. Use `svm_hinge_mode = "regularized"` for ordinary hinge loss
+with any supported kernel. For example:
+
+```{r svm-flexible, eval=FALSE}
+polynomial_fit <- odrl(
+  x, a, y,
+  learner = "svm", loss = "squared_hinge",
+  control = odrl_control(
+    svm_kernel = "polynomial",
+    svm_polynomial_degree = c(2, 3),
+    svm_penalty = c(0.01, 0.1, 1),
+    svm_hinge_mode = "regularized"
+  )
+)
+
+smooth_loss <- list(
+  name = "softplus_margin",
+  value = function(margin) {
+    z <- 1 - margin
+    pmax(z, 0) + log1p(exp(-abs(z)))
+  },
+  gradient = function(margin) -plogis(1 - margin)
+)
+custom_fit <- odrl(x, a, y, learner = "svm", loss = smooth_loss)
+```
+
+Custom kernels must be symmetric and positive semidefinite. Custom losses must
+return finite nonnegative values and finite derivatives; the caller remains
+responsible for convexity when a convex RKHS problem is intended.
+
 The Gaussian learner constructs and stores a dense \(n \times n\) kernel
 matrix, so both fitting time and memory scale at least quadratically with the
 training sample size. Prediction also evaluates the kernel against every
@@ -93,7 +127,9 @@ included in the quadratic penalty.
 
 With `nuisance = NULL` (the default), `odrl()` calls
 `odrl_nuisance_sl()`. Super Learner's internal CV is nested inside the outer
-cross-fitting loop. For example:
+cross-fitting loop. The number of outer folds is configurable. By default,
+the package stratifies them by treatment while balancing total fold sizes to
+differ by at most one row. For example:
 
 ```{r superlearner, eval=FALSE}
 fit <- odrl(
@@ -101,6 +137,20 @@ fit <- odrl(
   learner = "relu", loss = "logistic",
   nuisance_folds = 5,
   sl_inner_folds = 5,
+  sl.library = c("SL.mean", "SL.glm", "SL.glmnet")
+)
+```
+
+To use prespecified outer folds, supply the same row-aligned identifiers to
+`nuisance_fold_id`; their labels are normalized and retained for auditing.
+Each outer training set must contain at least two observations and, when the
+propensity is estimated, at least two observations from each treatment arm:
+
+```{r custom-folds, eval=FALSE}
+fit <- odrl(
+  x, treatment, outcome,
+  learner = "tree",
+  nuisance_fold_id = study_fold,
   sl.library = c("SL.mean", "SL.glm", "SL.glmnet")
 )
 ```
@@ -125,6 +175,26 @@ environment in which Super Learner should resolve them.
 The returned nuisance object preserves the libraries, coefficients, actual
 inner-fold counts, and captured warning messages for each outer fold in
 `nuisance$fits`; `nuisance$warnings` is the deduplicated warning ledger.
+
+## Cross-fitted parametric nuisances
+
+For a built-in parametric first stage, set `nuisance = "parametric"` (or
+`"glm"`). Each outer training fold fits a main-effects binomial logistic model
+for \(P(A=+1\mid X)\) and a Gaussian linear model for \(E(Y\mid X)\), then
+predicts its holdout rows:
+
+```{r parametric, eval=FALSE}
+fit <- odrl(
+  x, treatment, outcome,
+  learner = "linear",
+  nuisance = "parametric",
+  nuisance_folds = 4
+)
+```
+
+Supply interactions or transformations as columns of `x` when they belong to
+the intended parametric basis. `known_pi` and `known_e` work with this engine
+as well, in which case only the marginal outcome model is cross-fitted.
 
 ## User nuisance contract
 
@@ -157,23 +227,53 @@ fit <- odrl(
   control = odrl_control(
     linear_time_limit = 600,
     linear_relative_gap = 0.01,
+    linear_absolute_gap = 0.001,
+    linear_node_limit = 100000,
+    linear_threads = 1,
     linear_require_gap = FALSE
   )
 )
 fit$policy$diagnostics
 ```
 
-`linear_require_gap = TRUE` requires the requested relative gap. To request a
-numerical global-optimum certificate within the bounded-margin standardized
-affine class, combine it with `linear_relative_gap = 0` and inspect
+`linear_require_gap = TRUE` requires every requested relative and absolute gap
+criterion. Node and objective limits, thread count, logging, and additional
+nonconflicting HiGHS options are also configurable. To request a numerical
+global-optimum certificate within the bounded-margin standardized affine
+class, combine it with `linear_relative_gap = 0` and inspect
 `certified_global_optimum` in the returned diagnostics.
 
 `coef(fit)` returns affine coefficients on the original encoded-covariate
 scale; use `coef(fit, standardized = TRUE)` for the internally standardized
 coefficients. For trees, `split.step = 1` searches all candidate split points
 admitted by `policytree`; larger values deliberately thin that candidate set.
+`tree_backend` may instead be a list containing named `fit` and `predict`
+callbacks, and `tree_options` is passed to the selected engine.
 
-The ReLU engine implemented here is a regularized one-hidden-layer subclass
-with an optional affine candidate. Hard-tanh bounding gives its hinge score the
-universal-orthogonality property, but this implementation does not claim the
-manuscript's sparse deep-network entropy rate.
+## Neural policy classes
+
+The native neural engine supports an affine candidate, arbitrary hidden-layer
+width vectors, and ReLU, leaky-ReLU, tanh, sigmoid, or linear activations:
+
+```{r neural, eval=FALSE}
+fit <- odrl(
+  x, a, y,
+  learner = "relu", loss = "logistic",
+  control = odrl_control(
+    relu_architectures = list(integer(), 8L, c(16L, 8L)),
+    relu_activation = c("relu", "tanh"),
+    relu_decay = c(0.001, 0.01, 0.1),
+    relu_selection = "one_se"
+  )
+)
+```
+
+`relu_backend` can instead be a list containing `name`, `fit`, and `predict`
+callbacks, allowing another neural-network package to perform the numerical
+optimization while `odrlITR` retains score construction, tuning, and audit
+metadata. A custom loss can be supplied as the same `value`/`gradient` list
+used by the SVM engine or as a function returning `list(loss, gradient)`.
+
+Hard-tanh bounding gives the native hinge score the universal-orthogonality
+property, but this implementation does not claim the manuscript's sparse
+deep-network entropy rate.

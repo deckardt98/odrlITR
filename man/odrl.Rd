@@ -22,7 +22,8 @@ odrl(
   positive = NULL,
   control = odrl_control(),
   sl_verbose = FALSE,
-  sl_env = parent.frame()
+  sl_env = parent.frame(),
+  nuisance_fold_id = NULL
 )
 }
 \arguments{
@@ -34,15 +35,22 @@ odrl(
 
 \item{learner}{One of \code{"tree"}, \code{"linear"}, \code{"svm"}, or \code{"relu"}.}
 
-\item{loss}{\code{"exact"} for tree/linear or \code{"hinge"}/\code{"logistic"} for
-SVM/ReLU. If \code{NULL}, direct learners use exact loss and surrogate learners
-use bounded hinge.}
+\item{loss}{\code{"exact"} for tree/linear; \code{"hinge"}, \code{"logistic"}, or
+\code{"squared_hinge"} for SVM/neural learners; or a custom differentiable
+signed-margin loss. SVM custom losses use a list with \code{value} and
+\code{gradient} functions. Neural custom losses may use the same list or a
+function returning \code{list(loss, gradient)}. If \code{NULL}, direct learners use
+exact loss and surrogate learners use hinge loss. The caller is
+responsible for the mathematical properties of a custom loss, including
+convexity when a convex kernel-surrogate problem is intended.}
 
-\item{nuisance}{\code{NULL}/\code{"superlearner"} for built-in cross-fitting, an
-\code{\link[=odrl_nuisance_user]{odrl_nuisance_user()}} object, a list containing \code{m} plus \code{pi} or \code{e}, or
-a function \verb{function(x, a, y)} returning one of those objects.}
+\item{nuisance}{\code{NULL}/\code{"superlearner"} for cross-fitted Super Learner,
+\code{"parametric"}/\code{"glm"} for cross-fitted logistic treatment and linear
+outcome models, an \code{\link[=odrl_nuisance_user]{odrl_nuisance_user()}} object, a list containing \code{m}
+plus \code{pi} or \code{e}, or a function \verb{function(x, a, y)} returning one of those
+objects.}
 
-\item{nuisance_folds}{Outer nuisance cross-fitting folds.}
+\item{nuisance_folds}{Number of outer nuisance cross-fitting folds.}
 
 \item{sl.library}{Library passed to \code{\link[=odrl_nuisance_sl]{odrl_nuisance_sl()}}.}
 
@@ -67,6 +75,12 @@ treatment \code{+1}. The second factor level is used by default.}
 \item{sl_verbose}{Whether Super Learner prints progress.}
 
 \item{sl_env}{Environment for custom Super Learner wrappers.}
+
+\item{nuisance_fold_id}{Optional row-aligned user-specified outer-fold
+identifiers. When omitted, built-in folds are treatment-stratified and
+balanced to differ in total size by at most one row. User folds must leave
+at least two observations in every outer training set and, when the
+propensity is estimated, at least two observations from each arm.}
 }
 \value{
 An object of class \code{odrl_fit}, a list with the following principal
@@ -94,8 +108,9 @@ than relying on learner-specific internals.
 out-of-fold double-residual scores, and fits one policy. The direct learners
 optimize the empirical binary objective over a bounded-margin affine class
 or the candidate shallow-tree class searched by \code{policytree}.
-The surrogate learners use bounded hinge or logistic loss with a Gaussian
-kernel or a one-hidden-layer ReLU score.
+Surrogate learners support hinge, logistic, squared-hinge, and custom
+differentiable margin losses over configurable RKHS or neural-network score
+classes.
 }
 \examples{
 data <- odrl_simulate(250, boundary = "tree", seed = 4)

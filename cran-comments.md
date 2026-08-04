@@ -8,9 +8,9 @@
 
 ## Notes
 
-This is a new submission. The repository and pkgdown URLs return 404 until the
-initial public GitHub release is published; those URLs will be live before a
-CRAN submission.
+This is a new submission under private repository review. The repository and
+pkgdown URLs are intentionally inaccessible to unauthenticated users and will
+be made public before a CRAN submission.
 
 The local check process did not discover Pandoc while checking the top-level
 Markdown files, although the package vignettes built and rebuilt successfully

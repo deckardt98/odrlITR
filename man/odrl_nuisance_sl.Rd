@@ -19,7 +19,8 @@ odrl_nuisance_sl(
   known_pi = NULL,
   known_e = NULL,
   verbose = FALSE,
-  env = parent.frame()
+  env = parent.frame(),
+  fold_id = NULL
 )
 }
 \arguments{
@@ -30,7 +31,9 @@ two-level factor.}
 
 \item{y}{Numeric outcome.}
 
-\item{folds}{Number of outer cross-fitting folds.}
+\item{folds}{Number of outer cross-fitting folds. Ignored when \code{fold_id} is
+supplied. Automatically generated folds are treatment-stratified, and
+their total sizes differ by at most one row.}
 
 \item{sl.library}{Character vector or list understood by
 \code{\link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner()}}.}
@@ -62,6 +65,12 @@ most one of \code{known_pi} and \code{known_e}.}
 \item{verbose}{Passed to \code{\link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner()}}.}
 
 \item{env}{Environment in which custom Super Learner wrappers are resolved.}
+
+\item{fold_id}{Optional row-aligned user-specified outer-fold identifiers.
+Labels may be numeric, character, or factor and are normalized internally.
+Every resulting training set must contain at least two observations and
+must retain at least two observations from each treatment arm when the
+propensity is estimated.}
 }
 \value{
 An \code{odrl_nuisance} object containing aligned out-of-fold
