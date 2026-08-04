@@ -84,9 +84,9 @@ exceed one.}
 
 \item{svm_folds}{Number of ODRL-criterion cross-validation folds.}
 
-\item{svm_maxit}{Maximum optimizer iterations for the initial logistic
-kernel fit. A nonconverged fit is retried once from its incumbent with
-\code{max(3 * svm_maxit, svm_maxit + 100)} iterations.}
+\item{svm_maxit}{Maximum optimizer iterations for each regularized
+kernel-surrogate fit. A nonconverged fit is retried once from its
+incumbent with \code{max(3 * svm_maxit, svm_maxit + 100)} iterations.}
 
 \item{relu_hidden_units}{Integer vector of one-hidden-layer widths. Include
 zero to add an affine score candidate. This backward-compatible shortcut

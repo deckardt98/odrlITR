@@ -36,9 +36,9 @@
 #' @param svm_radius RKHS-radius grid for bounded-hinge fits. Values must not
 #'   exceed one.
 #' @param svm_folds Number of ODRL-criterion cross-validation folds.
-#' @param svm_maxit Maximum optimizer iterations for the initial logistic
-#'   kernel fit. A nonconverged fit is retried once from its incumbent with
-#'   `max(3 * svm_maxit, svm_maxit + 100)` iterations.
+#' @param svm_maxit Maximum optimizer iterations for each regularized
+#'   kernel-surrogate fit. A nonconverged fit is retried once from its
+#'   incumbent with `max(3 * svm_maxit, svm_maxit + 100)` iterations.
 #' @param svm_polynomial_degree Positive integer degree grid.
 #' @param svm_polynomial_scale Positive polynomial-kernel scale.
 #' @param svm_polynomial_offset Nonnegative polynomial-kernel offset.

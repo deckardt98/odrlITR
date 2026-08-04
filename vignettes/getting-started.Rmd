@@ -29,8 +29,10 @@ and forms the pooled out-of-fold score
 
 The direct learners minimize weighted policy error, equivalently maximizing
 \(\sum_i \widehat Z_i d(X_i)\). The surrogate learners minimize a weighted
-hinge, logistic, squared-hinge, or user-specified differentiable margin loss
-using labels `sign(Z)` and weights `abs(Z)`.
+hinge, exponential, logistic, squared-hinge, or user-specified differentiable
+margin loss using labels `sign(Z)` and weights `abs(Z)`. For signed margin
+\(t\), `loss = "exponential"` uses \(\phi(t)=\exp(-t)\), with a convex linear
+continuation only below the extreme margin \(t=-30\) to avoid overflow.
 
 For conditioning and comparable penalty grids, the second stage divides
 \(\widehat Z\) by its sample mean absolute value. This is a positive rescaling:
@@ -120,8 +122,8 @@ training sample size. Prediction also evaluates the kernel against every
 training observation. For large data sets, first benchmark this learner on a
 representative subset or use the affine, tree, or ReLU policy class.
 
-For logistic kernel fits, both the constant offset and the RKHS component are
-included in the quadratic penalty.
+For regularized kernel-surrogate fits, both the constant offset and the RKHS
+component are included in the quadratic penalty.
 
 ## Cross-fitted Super Learner
 

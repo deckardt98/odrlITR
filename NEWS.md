@@ -6,8 +6,9 @@
   user-supplied nuisance predictions.
 * Added direct linear-rule optimization with auditable HiGHS stopping controls
   and shallow-tree optimization through `policytree` or custom backends.
-* Added hinge, logistic, squared-hinge, and custom differentiable surrogate
-  losses for linear, Gaussian, polynomial, and custom RKHS kernels.
+* Added hinge, exponential, logistic, squared-hinge, and custom differentiable
+  surrogate losses for linear, Gaussian, polynomial, and custom RKHS kernels
+  and neural-network policies.
 * Added affine, shallow, and multilayer neural policies with common activation
   functions, criterion-based tuning, custom losses, and external backend
   callbacks.
