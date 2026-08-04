@@ -119,15 +119,18 @@ object.
 |---|---|---|---|
 | `"tree"` | `"exact"` | shallow axis-aligned tree using `policytree` or a custom backend | `policytree` |
 | `"linear"` | `"exact"` | bounded-margin affine sign rule via mixed-integer optimization | `highs` |
-| `"svm"` | hinge, logistic, squared hinge, or custom | linear, Gaussian, polynomial, or custom RKHS kernel | none |
-| `"relu"` | hinge, logistic, squared hinge, or custom | configurable feed-forward network or external neural backend | none |
+| `"svm"` | hinge, exponential, logistic, squared hinge, or custom | linear, Gaussian, polynomial, or custom RKHS kernel | none |
+| `"relu"` | hinge, exponential, logistic, squared hinge, or custom | configurable feed-forward network or external neural backend | none |
 
 The bounded-hinge SVM uses a normalized Gaussian kernel and an RKHS radius at
 most one, which certifies scores in `[-1, 1]`. Ordinary regularized hinge fits
 are also available for every supported kernel. The neural hinge learner
-applies a hard-tanh output map. Logistic and squared-hinge losses, and custom
-differentiable signed-margin losses, do not have the bounded-hinge objective's
-special universal-orthogonality guarantee.
+applies a hard-tanh output map. Exponential, logistic, squared-hinge, and custom
+differentiable signed-margin losses do not have the bounded-hinge objective's
+special universal-orthogonality guarantee. For signed margin \(t\),
+`loss = "exponential"` uses \(\exp(-t)\). A continuously differentiable convex
+linear continuation below the extreme margin \(t=-30\) prevents numerical
+overflow without affecting ordinary fitted margins.
 
 Gaussian-kernel learners form and retain an \(n \times n\) training kernel
 matrix. Their time and memory costs therefore grow at least quadratically in

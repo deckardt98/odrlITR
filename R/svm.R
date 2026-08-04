@@ -189,6 +189,16 @@
         builtin = TRUE
       ), class = c("odrl_surrogate_loss", "list")))
     }
+    if (name == "exponential") {
+      return(structure(list(
+        name = name,
+        value = function(margin) .odrl_exponential_margin(margin)$loss,
+        gradient = function(margin) {
+          .odrl_exponential_margin(margin)$gradient
+        },
+        builtin = TRUE
+      ), class = c("odrl_surrogate_loss", "list")))
+    }
     if (name == "hinge") {
       return(structure(list(
         name = name,
@@ -207,7 +217,8 @@
     }
     .odrl_abort(
       "Unknown SVM surrogate loss: ", loss, ". Use `\"hinge\"`, ",
-      "`\"logistic\"`, `\"squared_hinge\"`, or a custom loss specification."
+      "`\"exponential\"`, `\"logistic\"`, `\"squared_hinge\"`, or a ",
+      "custom loss specification."
     )
   }
   if (is.function(loss)) {
@@ -349,7 +360,14 @@
       drop(k %*% derivative) + lambda * drop(k %*% alpha))
   }
   set.seed(seed)
-  initial_intercept <- stats::qlogis(pmin(pmax(mean(label == 1), 0.01), 0.99))
+  initial_intercept <- if (isTRUE(loss_spec$builtin) &&
+      identical(loss_spec$name, "exponential")) {
+    positive <- max(sum(weight[label == 1]), .Machine$double.eps)
+    negative <- max(sum(weight[label == -1]), .Machine$double.eps)
+    0.5 * log(positive / negative)
+  } else {
+    stats::qlogis(pmin(pmax(mean(label == 1), 0.01), 0.99))
+  }
   fit <- stats::optim(
     par = c(initial_intercept, rep(0, n)), fn = objective, gr = gradient,
     method = "L-BFGS-B", control = list(maxit = maxit, factr = 1e8)

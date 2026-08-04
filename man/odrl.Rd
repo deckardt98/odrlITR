@@ -35,14 +35,14 @@ odrl(
 
 \item{learner}{One of \code{"tree"}, \code{"linear"}, \code{"svm"}, or \code{"relu"}.}
 
-\item{loss}{\code{"exact"} for tree/linear; \code{"hinge"}, \code{"logistic"}, or
-\code{"squared_hinge"} for SVM/neural learners; or a custom differentiable
-signed-margin loss. SVM custom losses use a list with \code{value} and
-\code{gradient} functions. Neural custom losses may use the same list or a
-function returning \code{list(loss, gradient)}. If \code{NULL}, direct learners use
-exact loss and surrogate learners use hinge loss. The caller is
-responsible for the mathematical properties of a custom loss, including
-convexity when a convex kernel-surrogate problem is intended.}
+\item{loss}{\code{"exact"} for tree/linear; \code{"hinge"}, \code{"exponential"},
+\code{"logistic"}, or \code{"squared_hinge"} for SVM/neural learners; or a custom
+differentiable signed-margin loss. SVM custom losses use a list with
+\code{value} and \code{gradient} functions. Neural custom losses may use the same
+list or a function returning \code{list(loss, gradient)}. If \code{NULL}, direct
+learners use exact loss and surrogate learners use hinge loss. The caller
+is responsible for the mathematical properties of a custom loss,
+including convexity when a convex kernel-surrogate problem is intended.}
 
 \item{nuisance}{\code{NULL}/\code{"superlearner"} for cross-fitted Super Learner,
 \code{"parametric"}/\code{"glm"} for cross-fitted logistic treatment and linear
@@ -108,9 +108,9 @@ than relying on learner-specific internals.
 out-of-fold double-residual scores, and fits one policy. The direct learners
 optimize the empirical binary objective over a bounded-margin affine class
 or the candidate shallow-tree class searched by \code{policytree}.
-Surrogate learners support hinge, logistic, squared-hinge, and custom
-differentiable margin losses over configurable RKHS or neural-network score
-classes.
+Surrogate learners support hinge, exponential, logistic, squared-hinge, and
+custom differentiable margin losses over configurable RKHS or
+neural-network score classes.
 }
 \examples{
 data <- odrl_simulate(250, boundary = "tree", seed = 4)

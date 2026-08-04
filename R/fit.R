@@ -40,10 +40,11 @@
       .odrl_abort("`loss` must be one supported surrogate-loss name.")
     }
     name <- .odrl_canonical_loss_name(loss)
-    if (!name %in% c("hinge", "logistic", "squared_hinge")) {
+    if (!name %in% c("hinge", "exponential", "logistic", "squared_hinge")) {
       .odrl_abort(
         "Unknown neural-network surrogate loss: ", loss, ". Use `\"hinge\"`, ",
-        "`\"logistic\"`, `\"squared_hinge\"`, or a custom loss."
+        "`\"exponential\"`, `\"logistic\"`, `\"squared_hinge\"`, or a ",
+        "custom loss."
       )
     }
     return(list(fit = name, label = name))
@@ -77,22 +78,22 @@
 #' out-of-fold double-residual scores, and fits one policy. The direct learners
 #' optimize the empirical binary objective over a bounded-margin affine class
 #' or the candidate shallow-tree class searched by `policytree`.
-#' Surrogate learners support hinge, logistic, squared-hinge, and custom
-#' differentiable margin losses over configurable RKHS or neural-network score
-#' classes.
+#' Surrogate learners support hinge, exponential, logistic, squared-hinge, and
+#' custom differentiable margin losses over configurable RKHS or
+#' neural-network score classes.
 #'
 #' @param x Covariate matrix or data frame.
 #' @param a Binary treatment. Numeric values may be `{0,1}` or `{-1,+1}`.
 #' @param y Numeric outcome, with larger values preferred.
 #' @param learner One of `"tree"`, `"linear"`, `"svm"`, or `"relu"`.
-#' @param loss `"exact"` for tree/linear; `"hinge"`, `"logistic"`, or
-#'   `"squared_hinge"` for SVM/neural learners; or a custom differentiable
-#'   signed-margin loss. SVM custom losses use a list with `value` and
-#'   `gradient` functions. Neural custom losses may use the same list or a
-#'   function returning `list(loss, gradient)`. If `NULL`, direct learners use
-#'   exact loss and surrogate learners use hinge loss. The caller is
-#'   responsible for the mathematical properties of a custom loss, including
-#'   convexity when a convex kernel-surrogate problem is intended.
+#' @param loss `"exact"` for tree/linear; `"hinge"`, `"exponential"`,
+#'   `"logistic"`, or `"squared_hinge"` for SVM/neural learners; or a custom
+#'   differentiable signed-margin loss. SVM custom losses use a list with
+#'   `value` and `gradient` functions. Neural custom losses may use the same
+#'   list or a function returning `list(loss, gradient)`. If `NULL`, direct
+#'   learners use exact loss and surrogate learners use hinge loss. The caller
+#'   is responsible for the mathematical properties of a custom loss,
+#'   including convexity when a convex kernel-surrogate problem is intended.
 #' @param nuisance `NULL`/`"superlearner"` for cross-fitted Super Learner,
 #'   `"parametric"`/`"glm"` for cross-fitted logistic treatment and linear
 #'   outcome models, an [odrl_nuisance_user()] object, a list containing `m`

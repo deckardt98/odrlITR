@@ -13,9 +13,10 @@ Description: Learns individualized treatment rules with the orthogonal double
     be estimated by cross-fitted Super Learner, cross-fitted parametric models,
     or supplied directly by the user. The second stage supports exact
     optimization over linear rules and shallow decision trees, as well as
-    surrogate-loss relaxation over reproducing-kernel Hilbert-space and
-    neural-network score classes. The nuisance, policy, tuning, and prediction
-    interfaces are modular and auditable.
+    hinge, exponential, logistic, squared-hinge, and custom surrogate-loss
+    relaxations over reproducing-kernel Hilbert-space and neural-network score
+    classes. The nuisance, policy, tuning, and prediction interfaces are
+    modular and auditable.
 License: MIT + file LICENSE
 URL: https://github.com/deckardt98/odrlITR,
     https://deckardt98.github.io/odrlITR/

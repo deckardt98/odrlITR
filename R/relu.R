@@ -155,6 +155,8 @@
         loss = .odrl_log1pexp(-margin),
         gradient = -stats::plogis(-margin)
       )
+    } else if (identical(loss, "exponential")) {
+      .odrl_exponential_margin(margin)
     } else if (identical(loss, "squared_hinge")) {
       violation <- pmax(0, 1 - margin)
       list(loss = violation^2, gradient = -2 * violation)
@@ -206,11 +208,16 @@
 }
 
 .odrl_relu_initial <- function(x, label, hidden, seed, loss,
-                               activation = "relu") {
+                               activation = "relu", weight = NULL) {
   p <- ncol(x)
   architecture <- .odrl_relu_architecture(hidden)
   intercept <- if (identical(loss, "logistic")) {
     stats::qlogis(pmin(pmax(mean(label == 1), 0.01), 0.99))
+  } else if (identical(loss, "exponential")) {
+    if (is.null(weight)) weight <- rep(1, length(label))
+    positive <- max(sum(weight[label == 1]), .Machine$double.eps)
+    negative <- max(sum(weight[label == -1]), .Machine$double.eps)
+    0.5 * log(positive / negative)
   } else {
     0
   }
@@ -315,7 +322,8 @@
   fits <- vector("list", restarts)
   for (restart in seq_len(restarts)) {
     initial <- .odrl_relu_initial(
-      x, label, architecture, seed + restart * 1009L, loss, activation
+      x, label, architecture, seed + restart * 1009L, loss, activation,
+      weight = weight
     )
     fits[[restart]] <- stats::optim(
       par = initial,

@@ -267,6 +267,29 @@
   pmax(x, 0) + log1p(exp(-abs(x)))
 }
 
+# The exponential margin loss grows too quickly for unconstrained numerical
+# optimizers when a trial iterate assigns a catastrophically wrong score.  The
+# ordinary loss is retained exactly through this cutoff.  Beyond it, its
+# tangent line gives a continuously differentiable, decreasing, convex
+# continuation without the flat gradient created by simple clipping.
+.odrl_exponential_cutoff <- 30
+
+.odrl_exponential_margin <- function(margin,
+                                     cutoff = .odrl_exponential_cutoff) {
+  z <- -as.numeric(margin)
+  ordinary <- z <= cutoff
+  value <- gradient <- numeric(length(z))
+  value[ordinary] <- exp(z[ordinary])
+  gradient[ordinary] <- -value[ordinary]
+  if (any(!ordinary)) {
+    anchor <- exp(cutoff)
+    excess <- z[!ordinary] - cutoff
+    value[!ordinary] <- anchor * (1 + excess)
+    gradient[!ordinary] <- -anchor
+  }
+  list(loss = value, gradient = gradient)
+}
+
 .odrl_hardtanh <- function(x) pmax(-1, pmin(1, x))
 
 .odrl_empirical_criterion <- function(score, action) {
