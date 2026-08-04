@@ -29,7 +29,7 @@ install.packages("odrlITR_0.1.0.tar.gz", repos = NULL, type = "source")
 Optional engines are installed only when needed:
 
 ```r
-install.packages(c("SuperLearner", "glmnet", "policytree", "highs"))
+install.packages(c("SuperLearner", "glmnet", "policytree", "highs", "nnet"))
 ```
 
 ## Quick start
@@ -115,12 +115,19 @@ object.
 
 ## Policy learners
 
+The interface follows a quick-start-plus-override design: each policy class has
+small built-in defaults and presets, while kernels, losses, fold assignments,
+tree engines, and neural engines can be supplied by the user. This is similar
+to Super Learner's accessibility philosophy, but policy candidates are tuned
+and selected rather than ensembled unless a user-provided backend implements
+an ensemble.
+
 | `learner` | allowed `loss` | policy class | optional package |
 |---|---|---|---|
 | `"tree"` | `"exact"` | shallow axis-aligned tree using `policytree` or a custom backend | `policytree` |
 | `"linear"` | `"exact"` | bounded-margin affine sign rule via mixed-integer optimization | `highs` |
-| `"svm"` | hinge, exponential, logistic, squared hinge, or custom | linear, Gaussian, polynomial, or custom RKHS kernel | none |
-| `"relu"` | hinge, exponential, logistic, squared hinge, or custom | configurable feed-forward network or external neural backend | none |
+| `"svm"` | hinge, exponential, logistic, squared hinge, or custom | linear, Gaussian, polynomial, finite-series, or custom RKHS score class | none |
+| `"relu"` | hinge, exponential, logistic, squared hinge, or custom | configurable feed-forward network or external neural backend | `nnet` for its optional logistic-only backend |
 
 The bounded-hinge SVM uses a normalized Gaussian kernel and an RKHS radius at
 most one, which certifies scores in `[-1, 1]`. Ordinary regularized hinge fits
@@ -132,12 +139,13 @@ special universal-orthogonality guarantee. For signed margin \(t\),
 linear continuation below the extreme margin \(t=-30\) prevents numerical
 overflow without affecting ordinary fitted margins.
 
-Gaussian-kernel learners form and retain an \(n \times n\) training kernel
+Gaussian and general custom-kernel learners form and retain an \(n \times n\) training kernel
 matrix. Their time and memory costs therefore grow at least quadratically in
 the training sample size, and prediction requires kernel evaluations against
-all training observations. For large samples, prefer the affine, tree, or
-ReLU learner, or benchmark the kernel learner on a representative subset
-before committing to a full tuning grid.
+all training observations. Finite-series learners instead use an explicit
+feature map and a primal fit, avoiding this dense kernel matrix. For large
+samples, prefer an affine, tree, finite-series, or neural learner, or benchmark
+a dense kernel learner before committing to a full tuning grid.
 
 Affine optimization is genuinely mixed-integer. A time-limited feasible
 incumbent is not described as proven optimal: solver status, MIP gap,
@@ -178,6 +186,61 @@ control <- odrl_control(
 )
 ```
 
+For an exact tree, `tree_depth` is the **maximum** depth: zero gives a constant
+rule, one a stump, and two permits a root split followed by child splits. The
+fit need not use every allowed split. Search cost can rise rapidly with depth;
+`tree_split_step > 1` reduces computation by thinning candidate split points
+and therefore changes the searched policy class.
+
+### Finite-series score classes
+
+The package provides leakage-safe, training-fold-fitted feature maps for common
+series approximations:
+
+| shortcut | basis | useful controls |
+|---|---|---|
+| `"legendre"` | Legendre polynomial series | `legendre_degree` |
+| `"fourier"` | sine/cosine harmonics | `fourier_harmonics` |
+| `"bspline"` | B-spline series | `spline_df`, `spline_degree` |
+| `"haar"` | Haar wavelets | `wavelet_level` |
+| `"local_polynomial"` | partition indicators and centered powers | `local_partitions`, `local_degree` |
+
+```r
+series <- odrl_series_kernel(
+  basis = "legendre",
+  legendre_degree = c(1, 2, 3),
+  combine = "anova",
+  interaction_order = 2,
+  max_features = 1000
+)
+
+fit <- odrl(
+  x, treatment, outcome,
+  learner = "svm", loss = "logistic",
+  control = odrl_control(
+    svm_kernel = series,
+    svm_penalty = c(0.01, 0.1, 1)
+  )
+)
+```
+
+Multivariate series are **not** full tensor products by default. The additive
+construction concatenates univariate terms. `combine = "anova"` adds tensor
+products only up to `interaction_order`; `combine = "total_degree"` provides
+a total-degree Legendre basis. A full `combine = "tensor"` basis is opt-in and
+guarded by `max_features` and `max_feature_elements`, because \(J\) terms in
+each of \(p\) coordinates can produce order \(J^p\) features. A total-degree
+Legendre basis grows more slowly, approximately as \(\binom{p+d}{d}\).
+
+Fold-specific bounds, spline knots, centering constants, and normalization
+factors are learned only from the relevant training fold and reused unchanged
+for validation and prediction. Fourier bases impose periodic endpoint
+behavior. The built-in wavelet is Haar; it is not a
+Cohen--Daubechies--Vial boundary-corrected construction. Specialist series can
+be supplied as user-defined positive-semidefinite kernels. Such callbacks use
+the general kernel route; unlike the built-in series families, they do not
+automatically receive the leakage-safe primal feature-map machinery.
+
 Custom kernels and differentiable margin losses use explicit callbacks:
 
 ```r
@@ -214,12 +277,53 @@ positive-semidefinite kernel; custom-loss authors are responsible for the
 loss's mathematical properties, including convexity when a convex RKHS
 problem is intended.
 
-For neural policies, `relu_architectures` accepts an affine candidate
-(`integer()`), one layer (`8L`), or deeper architectures such as
-`c(16L, 8L)`. Built-in activations are ReLU, leaky ReLU, tanh, sigmoid, and
-linear. `relu_backend` may instead provide named `fit` and `predict` callbacks
-to interface with another neural-network package. Likewise, `tree_backend`
-may provide callbacks for another axis-aligned tree implementation.
+### Neural quick-start presets
+
+The historical `learner = "relu"` name now denotes the generic neural learner.
+Presets provide small candidate grids; explicit detailed controls always take
+precedence over preset values.
+
+| `relu_preset` | candidates | activation/backend |
+|---|---|---|
+| `"affine"` | affine only | native linear |
+| `"fast"` | affine, one layer of width 8 | native ReLU |
+| `"standard"` | affine, widths 8 and 16 | native ReLU |
+| `"flexible"` | affine, widths 8/16, and 16-by-8 | native ReLU and tanh |
+| `"nnet"` | affine, widths 4/8/16 | `nnet`, sigmoid, skip connections |
+
+```r
+fast_fit <- odrl(
+  x, treatment, outcome,
+  learner = "relu", loss = "logistic",
+  control = odrl_control(relu_preset = "fast")
+)
+
+# A preset plus an explicit override:
+customized_fit <- odrl(
+  x, treatment, outcome,
+  learner = "relu", loss = "logistic",
+  control = odrl_control(
+    relu_preset = "flexible",
+    relu_architectures = list(integer(), 12L, c(16L, 8L))
+  )
+)
+```
+
+The native engine accepts an affine candidate (`integer()`), one layer (`8L`),
+or arbitrary width vectors such as `c(16L, 8L)`, with ReLU, leaky ReLU, tanh,
+sigmoid, or linear activation. These presets are pragmatic tuning grids rather
+than claims of universal optimality; policy-value CV (with an optional one-SE
+rule) selects among them.
+
+`relu_backend = "nnet"` uses `nnet::nnet()` for an affine model or one sigmoid
+hidden layer with optional input-to-output skip connections. It supports the
+weighted **logistic** margin loss only; it does not faithfully optimize hinge,
+exponential, squared-hinge, or arbitrary custom losses. An affine `nnet`
+candidate requires `skip = TRUE`, and wide fits may require a larger `MaxNWts`.
+The BFGS-based `nnet` engine is not a deep/GPU backend, and its decay scale is
+backend-specific. Use the native engine or named custom `fit`/`predict`
+callbacks for other objectives or architectures. Likewise, `tree_backend` may
+provide callbacks for another tree implementation.
 
 ## Reproducibility and scope
 

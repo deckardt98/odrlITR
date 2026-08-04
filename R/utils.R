@@ -28,7 +28,8 @@
   if (length(x) != 1L || !is.finite(x)) {
     .odrl_abort("`", name, "` must be one finite number.")
   }
-  if (integer && x != as.integer(x)) {
+  if (integer && (x != trunc(x) || x > .Machine$integer.max ||
+      x < -(.Machine$integer.max + 1))) {
     .odrl_abort("`", name, "` must be an integer.")
   }
   lower_bad <- if (open_lower) x <= lower else x < lower

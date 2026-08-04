@@ -116,11 +116,55 @@ Custom kernels must be symmetric and positive semidefinite. Custom losses must
 return finite nonnegative values and finite derivatives; the caller remains
 responsible for convexity when a convex RKHS problem is intended.
 
-The Gaussian learner constructs and stores a dense \(n \times n\) kernel
-matrix, so both fitting time and memory scale at least quadratically with the
-training sample size. Prediction also evaluates the kernel against every
-training observation. For large data sets, first benchmark this learner on a
-representative subset or use the affine, tree, or ReLU policy class.
+## Finite-series score classes
+
+Common series approximations are available through `odrl_series_kernel()` or
+the character shortcuts `"legendre"`, `"fourier"`, `"bspline"`, `"haar"`,
+and `"local_polynomial"`. These learners fit a regularized surrogate in the
+explicit feature space, avoiding a dense \(n\)-by-\(n\) kernel matrix:
+
+```{r series, eval=FALSE}
+series <- odrl_series_kernel(
+  basis = "legendre",
+  legendre_degree = c(1, 2, 3),
+  combine = "anova",
+  interaction_order = 2,
+  max_features = 1000
+)
+
+fit <- odrl(
+  x, a, y, learner = "svm", loss = "logistic",
+  control = odrl_control(
+    svm_kernel = series,
+    svm_penalty = c(0.01, 0.1, 1)
+  )
+)
+```
+
+The default `combine = "additive"` concatenates univariate basis terms and
+contains no interactions. `"anova"` adds tensor-product interactions only up
+to `interaction_order`; `"total_degree"` gives a total-degree Legendre basis;
+and `"tensor"` requests the full tensor product. The full tensor construction
+is deliberately opt-in because \(J\) terms in each of \(p\) coordinates can
+generate \(J^p\) features. By comparison, a total-degree Legendre basis has
+approximately \(\binom{p+d}{d}\) terms. Feature-count and matrix-size guards
+stop accidental explosions before allocation.
+
+Bounds, spline knots, centering constants, and normalization factors are
+learned only from each policy-training fold and then reused unchanged on its
+validation data and on future predictions. Fourier terms impose periodic
+endpoint behavior. The built-in wavelet basis is Haar, not a
+Cohen--Daubechies--Vial boundary-corrected wavelet. `"local_polynomial"`
+denotes a partitioned basis expansion rather than a local-polynomial
+regression smoother.
+
+Gaussian and general custom-kernel learners construct and retain a dense
+\(n \times n\) kernel matrix, so fitting time and memory scale at least
+quadratically with the training sample size. Prediction also evaluates the
+kernel against every training observation. This warning does not apply to the
+primal finite-series route. For large data sets, first benchmark a dense
+kernel learner on a representative subset or use the affine, tree,
+finite-series, or neural policy class.
 
 For regularized kernel-surrogate fits, both the constant offset and the RKHS
 component are included in the quadratic penalty.
@@ -247,12 +291,42 @@ class, combine it with `linear_relative_gap = 0` and inspect
 
 `coef(fit)` returns affine coefficients on the original encoded-covariate
 scale; use `coef(fit, standardized = TRUE)` for the internally standardized
-coefficients. For trees, `split.step = 1` searches all candidate split points
-admitted by `policytree`; larger values deliberately thin that candidate set.
-`tree_backend` may instead be a list containing named `fit` and `predict`
-callbacks, and `tree_options` is passed to the selected engine.
+coefficients. For trees, `tree_depth` is the maximum depth: zero fits a
+constant rule, one a stump, and two permits a root split followed by child
+splits. The fitted tree need not attain the maximum. Search cost can increase
+rapidly with depth. `tree_split_step = 1` searches all candidate split points
+admitted by `policytree`; larger values deliberately thin that candidate set
+and hence change the searched class. `tree_backend` may instead be a list
+containing named `fit` and `predict` callbacks, and `tree_options` is passed to
+the selected engine.
 
 ## Neural policy classes
+
+The historical `learner = "relu"` name denotes the package's generic neural
+learner. Quick-start presets provide pragmatic candidate grids while retaining
+fine-grained overrides:
+
+| `relu_preset` | candidate architectures | engine |
+|:--|:--|:--|
+| `"affine"` | affine only | native linear |
+| `"fast"` | affine and one layer of width 8 | native ReLU |
+| `"standard"` | affine and widths 8 and 16 | native ReLU |
+| `"flexible"` | affine, widths 8/16, and 16-by-8 | native ReLU and tanh |
+| `"nnet"` | affine and widths 4/8/16 | `nnet`, sigmoid, skip connections |
+
+```{r neural-preset, eval=FALSE}
+fit <- odrl(
+  x, a, y,
+  learner = "relu", loss = "logistic",
+  control = odrl_control(relu_preset = "fast")
+)
+```
+
+A preset supplies defaults only. Explicit `relu_architectures`, activation,
+decay, restart, iteration, selection, or backend controls take precedence.
+Selection remains data-dependent through policy-value cross-validation and an
+optional one-standard-error rule; presets are not claims that one architecture
+is universally optimal.
 
 The native neural engine supports an affine candidate, arbitrary hidden-layer
 width vectors, and ReLU, leaky-ReLU, tanh, sigmoid, or linear activations:
@@ -270,11 +344,21 @@ fit <- odrl(
 )
 ```
 
-`relu_backend` can instead be a list containing `name`, `fit`, and `predict`
-callbacks, allowing another neural-network package to perform the numerical
-optimization while `odrlITR` retains score construction, tuning, and audit
-metadata. A custom loss can be supplied as the same `value`/`gradient` list
-used by the SVM engine or as a function returning `list(loss, gradient)`.
+`relu_backend = "nnet"` uses `nnet::nnet()` for an affine model or one sigmoid
+hidden layer with optional input-to-output skip connections. In `odrlITR`, it
+supports weighted logistic margin loss only. It does not faithfully optimize
+hinge, exponential, squared-hinge, or custom margin losses; use the native
+engine or a custom backend for those objectives. An affine `nnet` candidate
+requires `skip = TRUE`; `MaxNWts` may need to be increased for wide or
+high-dimensional fits. This CPU/BFGS engine is not a deep-network or GPU
+backend, and its weight-decay scale is backend-specific.
+
+More generally, `relu_backend` can be a list containing `name`, `fit`, and
+`predict` callbacks, allowing another neural-network package to perform the
+numerical optimization while `odrlITR` retains score construction, tuning,
+and audit metadata. A custom loss can be supplied as the same
+`value`/`gradient` list used by the SVM engine or as a function returning
+`list(loss, gradient)`.
 
 Hard-tanh bounding gives the native hinge score the universal-orthogonality
 property, but this implementation does not claim the manuscript's sparse

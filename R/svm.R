@@ -19,6 +19,9 @@
 # cover the common cases, while a function (or a list containing `fun`) lets a
 # caller provide K(x, y) without adding a mandatory SVM dependency.
 .odrl_resolve_kernel <- function(kernel, control = NULL, candidate = list()) {
+  if (.odrl_is_series_kernel(kernel)) {
+    return(.odrl_resolve_series_kernel(kernel))
+  }
   if (is.function(kernel)) {
     return(list(
       name = "custom", fun = kernel, args = list(), builtin = FALSE
@@ -122,8 +125,17 @@
 }
 
 .odrl_builtin_kernel <- function(spec, name = NULL) {
-  builtin <- isTRUE(spec$builtin) && is.null(spec$fun)
+  builtin <- isTRUE(spec$builtin) && is.null(spec$fun) &&
+    !isTRUE(spec$finite_features)
   if (is.null(name)) builtin else builtin && identical(spec$name, name)
+}
+
+.odrl_effective_hinge_mode <- function(spec, mode = "auto") {
+  if (identical(mode, "auto")) {
+    if (.odrl_builtin_kernel(spec, "rbf")) "bounded" else "regularized"
+  } else {
+    mode
+  }
 }
 
 .odrl_call_custom_kernel <- function(spec, x, y) {
@@ -149,6 +161,12 @@
   spec <- .odrl_resolve_kernel(
     kernel, control = control, candidate = candidate
   )
+  if (inherits(spec, "odrl_series_kernel")) {
+    .odrl_abort(
+      "Finite-series specifications use a primal feature-map fit and do not ",
+      "form a dense kernel matrix."
+    )
+  }
   if (!.odrl_builtin_kernel(spec)) {
     return(.odrl_call_custom_kernel(spec, x, y))
   }
@@ -415,6 +433,9 @@
 }
 
 .odrl_predict_kernel_unclipped <- function(fit, newx, kernel = NULL) {
+  if (!is.null(fit$series_map)) {
+    return(.odrl_predict_series_unclipped(fit, newx))
+  }
   spec <- fit$kernel_spec %||% .odrl_resolve_kernel(kernel)
   k <- .odrl_kernel_matrix(
     newx, fit$training_x, kernel = spec, bandwidth2 = fit$bandwidth2
@@ -445,12 +466,16 @@
   } else {
     NA_integer_
   }
-  hinge_mode <- control$svm_hinge_mode %||% "bounded"
+  hinge_mode <- .odrl_effective_hinge_mode(
+    kernel_spec, control$svm_hinge_mode %||% "auto"
+  )
   bounded_hinge <- isTRUE(loss_spec$builtin) &&
     identical(loss_spec$name, "hinge") &&
     .odrl_builtin_kernel(kernel_spec, "rbf") &&
     identical(hinge_mode, "bounded")
-  base <- if (.odrl_builtin_kernel(kernel_spec, "polynomial")) {
+  base <- if (inherits(kernel_spec, "odrl_series_kernel")) {
+    .odrl_series_grid(kernel_spec)
+  } else if (.odrl_builtin_kernel(kernel_spec, "polynomial")) {
     expand.grid(
       multiplier = multiplier,
       degree = degree,
@@ -478,12 +503,20 @@
   kernel_spec <- .odrl_resolve_kernel(
     control$svm_kernel, control = control, candidate = candidate
   )
-  hinge_mode <- control$svm_hinge_mode %||% "bounded"
+  hinge_mode <- .odrl_effective_hinge_mode(
+    kernel_spec, control$svm_hinge_mode %||% "auto"
+  )
   bounded_hinge <- isTRUE(loss_spec$builtin) &&
     identical(loss_spec$name, "hinge") &&
     .odrl_builtin_kernel(kernel_spec, "rbf") &&
     identical(hinge_mode, "bounded")
-  if (bounded_hinge) {
+  if (inherits(kernel_spec, "odrl_series_kernel")) {
+    .odrl_fit_series_surrogate(
+      x = x, score = score, spec = kernel_spec, candidate = candidate,
+      lambda = candidate$lambda, maxit = control$svm_maxit, seed = seed,
+      loss = loss_spec
+    )
+  } else if (bounded_hinge) {
     .odrl_fit_kernel_hinge(
       x, score, kernel_spec, candidate$multiplier,
       candidate$radius, seed, control = control, candidate = candidate
@@ -502,8 +535,11 @@
 .odrl_fit_svm <- function(x, score, control, loss) {
   loss_spec <- .odrl_resolve_surrogate_loss(loss)
   kernel_spec <- .odrl_resolve_kernel(control$svm_kernel, control = control)
+  hinge_mode <- .odrl_effective_hinge_mode(
+    kernel_spec, control$svm_hinge_mode %||% "auto"
+  )
   if (isTRUE(loss_spec$builtin) && identical(loss_spec$name, "hinge") &&
-      identical(control$svm_hinge_mode %||% "bounded", "bounded") &&
+      identical(hinge_mode, "bounded") &&
       !.odrl_builtin_kernel(kernel_spec, "rbf")) {
     .odrl_abort(
       "`svm_hinge_mode = \"bounded\"` requires a Gaussian/RBF kernel. ",
@@ -522,9 +558,18 @@
     for (fold in seq_len(folds)) {
       train <- fold_id != fold
       holdout <- !train
-      transform <- .odrl_standardize_fit(x[train, , drop = FALSE])
-      train_x <- .odrl_standardize_apply(x[train, , drop = FALSE], transform)
-      holdout_x <- .odrl_standardize_apply(x[holdout, , drop = FALSE], transform)
+      if (inherits(kernel_spec, "odrl_series_kernel")) {
+        train_x <- x[train, , drop = FALSE]
+        holdout_x <- x[holdout, , drop = FALSE]
+      } else {
+        transform <- .odrl_standardize_fit(x[train, , drop = FALSE])
+        train_x <- .odrl_standardize_apply(
+          x[train, , drop = FALSE], transform
+        )
+        holdout_x <- .odrl_standardize_apply(
+          x[holdout, , drop = FALSE], transform
+        )
+      }
       fit <- .odrl_fit_svm_candidate(
         train_x, score[train], control, loss_spec, candidate,
         control$seed + 10000L * j + fold
@@ -548,8 +593,13 @@
     )
   }
   best <- eligible[[which.max(grid$mean_criterion[eligible])]]
-  transform <- .odrl_standardize_fit(x)
-  standardized_x <- .odrl_standardize_apply(x, transform)
+  if (inherits(kernel_spec, "odrl_series_kernel")) {
+    transform <- NULL
+    standardized_x <- x
+  } else {
+    transform <- .odrl_standardize_fit(x)
+    standardized_x <- .odrl_standardize_apply(x, transform)
+  }
   final <- .odrl_fit_svm_candidate(
     standardized_x, score, control, loss_spec,
     as.list(grid[best, , drop = FALSE]), control$seed + 900000L
@@ -564,7 +614,11 @@
   action <- ifelse(raw >= 0, 1, -1)
   elapsed <- proc.time()[["elapsed"]] - started
   structure(list(
-    engine = "kernel",
+    engine = if (inherits(kernel_spec, "odrl_series_kernel")) {
+      "series"
+    } else {
+      "kernel"
+    },
     kernel = kernel_spec$name,
     kernel_spec = final$kernel_spec,
     loss = loss_spec$name,
@@ -580,7 +634,15 @@
       elapsed = elapsed,
       kernel = kernel_spec$name,
       loss = loss_spec$name,
-      custom_kernel = !.odrl_builtin_kernel(kernel_spec),
+      custom_kernel = !.odrl_builtin_kernel(kernel_spec) &&
+        !inherits(kernel_spec, "odrl_series_kernel"),
+      finite_series = inherits(kernel_spec, "odrl_series_kernel"),
+      series_combine = if (inherits(kernel_spec, "odrl_series_kernel")) {
+        kernel_spec$combine
+      } else {
+        NA_character_
+      },
+      series_features = final$series_map$feature_count %||% NA_integer_,
       custom_loss = !isTRUE(loss_spec$builtin),
       hinge_mode = final$hinge_mode %||% NA_character_,
       globally_bounded = isTRUE(final$globally_bounded),
@@ -599,7 +661,11 @@
 
 .odrl_predict_svm <- function(object, newx, type = c("action", "score")) {
   type <- match.arg(type)
-  z <- .odrl_standardize_apply(newx, object$transform)
+  z <- if (is.null(object$transform)) {
+    newx
+  } else {
+    .odrl_standardize_apply(newx, object$transform)
+  }
   raw <- .odrl_predict_kernel_raw(object$fit, z)
   if (type == "score") raw else ifelse(raw >= 0, 1, -1)
 }

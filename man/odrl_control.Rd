@@ -13,7 +13,7 @@ odrl_control(
   linear_time_limit = 60,
   linear_relative_gap = 0.01,
   linear_require_gap = FALSE,
-  svm_kernel = c("rbf", "linear"),
+  svm_kernel = "rbf",
   svm_penalty = c(0.01, 0.1, 1),
   svm_rbf_multiplier = c(0.5, 1, 2),
   svm_radius = 1,
@@ -39,20 +39,26 @@ odrl_control(
   svm_polynomial_degree = 2L,
   svm_polynomial_scale = 1,
   svm_polynomial_offset = 1,
-  svm_hinge_mode = c("bounded", "regularized"),
+  svm_hinge_mode = c("auto", "bounded", "regularized"),
   svm_kernel_function = NULL,
   svm_kernel_args = list(),
   relu_architectures = NULL,
   relu_activation = "relu",
   relu_leaky_slope = 0.01,
-  relu_backend = "native"
+  relu_backend = "native",
+  relu_preset = NULL,
+  relu_backend_options = list()
 )
 }
 \arguments{
-\item{tree_depth}{Maximum depth of a direct policy tree.}
+\item{tree_depth}{Maximum depth of a direct policy tree. Zero fits a
+constant rule, one a stump, and two allows a root split followed by child
+splits. The fitted tree may be shallower than this maximum, and search
+cost can rise quickly with depth.}
 
 \item{tree_split_step}{Candidate split-step passed to
-\code{\link[policytree:policy_tree]{policytree::policy_tree()}}.}
+\code{\link[policytree:policy_tree]{policytree::policy_tree()}}. Values above one reduce computation by
+thinning candidate split points and therefore change the searched class.}
 
 \item{tree_min_node_size}{Minimum terminal-node size.}
 
@@ -68,11 +74,14 @@ negative affine score. It cannot exceed \code{linear_coefficient_bound}.}
 \item{linear_require_gap}{If \code{TRUE}, reject a feasible incumbent unless the
 solver proves the requested gap.}
 
-\item{svm_kernel}{Kernel specification: \code{"rbf"}/\code{"gaussian"}, \code{"linear"},
-\code{"polynomial"}/\code{"poly"}, a function \verb{function(x, y)}, or a list with
-\code{name}, \code{fun}, and optional \code{args}. A custom function must return a finite
-kernel matrix; the caller is responsible for supplying a symmetric
-positive-semidefinite kernel.}
+\item{svm_kernel}{Kernel or finite-series specification. Built-in kernels
+are \code{"rbf"}/\code{"gaussian"}, \code{"linear"}, and
+\code{"polynomial"}/\code{"poly"}. Built-in finite-series shortcuts are
+\code{"legendre"}, \code{"fourier"}, \code{"bspline"}, \code{"haar"}, and
+\code{"local_polynomial"}; use \code{\link[=odrl_series_kernel]{odrl_series_kernel()}} for detailed controls.
+A kernel may also be a function \verb{function(x, y)} or a list with \code{name},
+\code{fun}, and optional \code{args}. The caller is responsible for a custom
+kernel's symmetry and positive semidefiniteness.}
 
 \item{svm_penalty}{Positive regularization grid for kernel-surrogate fits.}
 
@@ -139,9 +148,11 @@ represented by dedicated arguments cannot be overridden here.}
 
 \item{svm_polynomial_offset}{Nonnegative polynomial-kernel offset.}
 
-\item{svm_hinge_mode}{\code{"bounded"} preserves the globally bounded RBF-hinge
-construction; \code{"regularized"} enables ordinary hinge fitting with any
-supported kernel.}
+\item{svm_hinge_mode}{\code{"auto"} uses the globally bounded construction for
+Gaussian/RBF hinge fits and ordinary regularized hinge fitting otherwise.
+\code{"bounded"} explicitly requests the globally bounded RBF construction;
+\code{"regularized"} enables ordinary hinge fitting with any supported score
+class.}
 
 \item{svm_kernel_function}{Function used with \code{svm_kernel = "custom"}.}
 
@@ -156,12 +167,26 @@ supported kernel.}
 
 \item{relu_leaky_slope}{Negative-side slope for leaky ReLU.}
 
-\item{relu_backend}{\code{"native"} or a list containing \code{name}, \code{fit}, and
-\code{predict} callbacks for an external neural-network engine. The fit
+\item{relu_backend}{\code{"native"}, \code{"nnet"}, or a list containing \code{name},
+\code{fit}, and \code{predict} callbacks for an external neural-network engine.
+The \code{"nnet"} backend supports logistic loss with an affine score or one
+sigmoid hidden layer. The fit
 callback receives \code{x}, \code{score}, \code{architecture}, \code{activation}, \code{decay},
 \code{loss}, \code{restarts}, \code{maxit}, \code{seed}, and \code{leaky_slope}. The predict
 callback is called as \code{predict(model, newx)} and must return one finite
 numerical score per row.}
+
+\item{relu_preset}{Optional quick-start neural candidate grid. Use
+\code{"affine"}, \code{"fast"}, \code{"standard"}, \code{"flexible"}, or \code{"nnet"}.
+A preset supplies defaults only: explicitly supplied fine-grained neural
+controls take precedence. Presets define candidates selected by
+policy-value cross-validation; they are not ensembles. Historical
+\verb{relu_*} names cover the generic neural learner for backward
+compatibility.}
+
+\item{relu_backend_options}{Named backend-specific options. For
+\code{relu_backend = "nnet"}, supported entries are \code{skip}, \code{rang},
+\code{MaxNWts}, \code{abstol}, \code{reltol}, \code{trace}, and \code{probability_epsilon}.}
 }
 \value{
 An object of class \code{odrl_control}.
