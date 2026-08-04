@@ -33,7 +33,9 @@ odrl(
 
 \item{y}{Numeric outcome, with larger values preferred.}
 
-\item{learner}{One of \code{"tree"}, \code{"linear"}, \code{"svm"}, or \code{"relu"}.}
+\item{learner}{One of \code{"tree"}, \code{"linear"}, \code{"svm"}, or \code{"relu"}. The
+historical \code{"relu"} name denotes the generic neural learner and may use
+non-ReLU activations or a user-supplied backend.}
 
 \item{loss}{\code{"exact"} for tree/linear; \code{"hinge"}, \code{"exponential"},
 \code{"logistic"}, or \code{"squared_hinge"} for SVM/neural learners; or a custom

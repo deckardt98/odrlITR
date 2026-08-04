@@ -245,15 +245,42 @@
   theta
 }
 
-.odrl_relu_backend_spec <- function(backend) {
+.odrl_relu_backend_spec <- function(backend, options = list()) {
+  if (is.list(backend) && isTRUE(backend$native) &&
+      identical(backend$name %||% "native", "native")) {
+    if (length(options)) {
+      .odrl_abort(
+        "`relu_backend_options` are only used by a named external backend."
+      )
+    }
+    return(backend)
+  }
   if (is.null(backend) || identical(backend, "native")) {
+    if (length(options)) {
+      .odrl_abort(
+        "`relu_backend_options` are only used by a named external backend."
+      )
+    }
     return(list(name = "native", native = TRUE))
+  }
+  if (identical(backend, "nnet")) {
+    specification <- .odrl_nnet_backend(options)
+    return(list(
+      name = specification$name, native = FALSE,
+      fit = specification$fit, predict = specification$predict
+    ))
   }
   if (!is.list(backend) || !is.function(backend$fit) ||
       !is.function(backend$predict)) {
     .odrl_abort(
-      "A custom neural backend must be a list containing `fit` and ",
-      "`predict` functions."
+      "`relu_backend` must be `\"native\"`, `\"nnet\"`, or a custom ",
+      "list containing `fit` and `predict` functions."
+    )
+  }
+  if (length(options)) {
+    .odrl_abort(
+      "For a custom neural backend, close over backend-specific options in ",
+      "its `fit` and `predict` callbacks."
     )
   }
   name <- backend$name %||% "custom"
@@ -305,6 +332,14 @@
         "per training row."
       )
     }
+    model_field <- function(name, default) {
+      if (is.list(model) && !is.null(model[[name]])) model[[name]] else default
+    }
+    model_convergence <- model_field("convergence", 0L)
+    model_objective <- model_field("objective", NA_real_)
+    model_restart <- model_field("restart", NA_integer_)
+    model_attempts <- model_field("attempts", NA_integer_)
+    model_objectives <- model_field("all_objectives", NA_real_)
     return(list(
       backend = "custom", backend_name = backend$name, model = model,
       backend_predict = backend$predict, architecture = architecture,
@@ -312,8 +347,10 @@
       activation = activation, leaky_slope = leaky_slope, decay = decay,
       loss = loss, loss_name = .odrl_relu_loss_name(loss),
       loss_builtin = is.character(loss), bounded_output = bounded_output,
-      objective = NA_real_, convergence = 0L, message = NULL,
-      restart = NA_integer_, attempts = NA_integer_, all_objectives = NA_real_
+      objective = model_objective, convergence = as.integer(model_convergence),
+      message = model_field("message", NULL),
+      restart = as.integer(model_restart), attempts = as.integer(model_attempts),
+      all_objectives = model_objectives
     ))
   }
 
@@ -449,7 +486,10 @@
   architectures <- .odrl_relu_architectures_from_control(control)
   activations <- control$relu_activation %||% "relu"
   leaky_slope <- control$relu_leaky_slope %||% 0.01
-  backend <- control$relu_backend %||% "native"
+  backend <- .odrl_relu_backend_spec(
+    control$relu_backend %||% "native",
+    control$relu_backend_options %||% list()
+  )
   grid_index <- expand.grid(
     architecture_index = seq_along(architectures),
     activation = activations,
@@ -549,6 +589,7 @@
       activation = final$activation,
       leaky_slope = final$leaky_slope,
       backend = final$backend_name,
+      preset = control$relu_preset %||% NA_character_,
       loss = final$loss_name
     )
   ), class = "odrl_policy_relu")

@@ -85,7 +85,9 @@
 #' @param x Covariate matrix or data frame.
 #' @param a Binary treatment. Numeric values may be `{0,1}` or `{-1,+1}`.
 #' @param y Numeric outcome, with larger values preferred.
-#' @param learner One of `"tree"`, `"linear"`, `"svm"`, or `"relu"`.
+#' @param learner One of `"tree"`, `"linear"`, `"svm"`, or `"relu"`. The
+#'   historical `"relu"` name denotes the generic neural learner and may use
+#'   non-ReLU activations or a user-supplied backend.
 #' @param loss `"exact"` for tree/linear; `"hinge"`, `"exponential"`,
 #'   `"logistic"`, or `"squared_hinge"` for SVM/neural learners; or a custom
 #'   differentiable signed-margin loss. SVM custom losses use a list with

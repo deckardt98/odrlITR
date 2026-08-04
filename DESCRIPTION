@@ -26,11 +26,13 @@ Language: en-US
 Depends:
     R (>= 4.1.0)
 Imports:
+    splines,
     stats
 Suggests:
     glmnet,
     highs,
     knitr,
+    nnet,
     policytree,
     rmarkdown,
     SuperLearner,

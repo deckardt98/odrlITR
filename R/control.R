@@ -1,8 +1,12 @@
 #' Control computational settings for ODRL
 #'
-#' @param tree_depth Maximum depth of a direct policy tree.
+#' @param tree_depth Maximum depth of a direct policy tree. Zero fits a
+#'   constant rule, one a stump, and two allows a root split followed by child
+#'   splits. The fitted tree may be shallower than this maximum, and search
+#'   cost can rise quickly with depth.
 #' @param tree_split_step Candidate split-step passed to
-#'   [policytree::policy_tree()].
+#'   [policytree::policy_tree()]. Values above one reduce computation by
+#'   thinning candidate split points and therefore change the searched class.
 #' @param tree_min_node_size Minimum terminal-node size.
 #' @param tree_backend Tree engine. Use `"policytree"` or a list containing
 #'   `name`, `fit`, and `predict` callbacks. The fit callback receives `x`,
@@ -25,11 +29,14 @@
 #' @param linear_log_to_console Whether HiGHS prints its solver log.
 #' @param linear_solver_options Named list of additional HiGHS options. Options
 #'   represented by dedicated arguments cannot be overridden here.
-#' @param svm_kernel Kernel specification: `"rbf"`/`"gaussian"`, `"linear"`,
-#'   `"polynomial"`/`"poly"`, a function `function(x, y)`, or a list with
-#'   `name`, `fun`, and optional `args`. A custom function must return a finite
-#'   kernel matrix; the caller is responsible for supplying a symmetric
-#'   positive-semidefinite kernel.
+#' @param svm_kernel Kernel or finite-series specification. Built-in kernels
+#'   are `"rbf"`/`"gaussian"`, `"linear"`, and
+#'   `"polynomial"`/`"poly"`. Built-in finite-series shortcuts are
+#'   `"legendre"`, `"fourier"`, `"bspline"`, `"haar"`, and
+#'   `"local_polynomial"`; use [odrl_series_kernel()] for detailed controls.
+#'   A kernel may also be a function `function(x, y)` or a list with `name`,
+#'   `fun`, and optional `args`. The caller is responsible for a custom
+#'   kernel's symmetry and positive semidefiniteness.
 #' @param svm_penalty Positive regularization grid for kernel-surrogate fits.
 #' @param svm_rbf_multiplier Positive multipliers of the median squared
 #'   pairwise distance.
@@ -42,9 +49,11 @@
 #' @param svm_polynomial_degree Positive integer degree grid.
 #' @param svm_polynomial_scale Positive polynomial-kernel scale.
 #' @param svm_polynomial_offset Nonnegative polynomial-kernel offset.
-#' @param svm_hinge_mode `"bounded"` preserves the globally bounded RBF-hinge
-#'   construction; `"regularized"` enables ordinary hinge fitting with any
-#'   supported kernel.
+#' @param svm_hinge_mode `"auto"` uses the globally bounded construction for
+#'   Gaussian/RBF hinge fits and ordinary regularized hinge fitting otherwise.
+#'   `"bounded"` explicitly requests the globally bounded RBF construction;
+#'   `"regularized"` enables ordinary hinge fitting with any supported score
+#'   class.
 #' @param svm_kernel_function Function used with `svm_kernel = "custom"`.
 #' @param svm_kernel_args Named arguments passed to a custom kernel function.
 #' @param relu_hidden_units Integer vector of one-hidden-layer widths. Include
@@ -65,12 +74,24 @@
 #' @param relu_activation Activation grid: `"relu"`, `"leaky_relu"`, `"tanh"`,
 #'   `"sigmoid"`, or `"linear"`.
 #' @param relu_leaky_slope Negative-side slope for leaky ReLU.
-#' @param relu_backend `"native"` or a list containing `name`, `fit`, and
-#'   `predict` callbacks for an external neural-network engine. The fit
+#' @param relu_backend `"native"`, `"nnet"`, or a list containing `name`,
+#'   `fit`, and `predict` callbacks for an external neural-network engine.
+#'   The `"nnet"` backend supports logistic loss with an affine score or one
+#'   sigmoid hidden layer. The fit
 #'   callback receives `x`, `score`, `architecture`, `activation`, `decay`,
 #'   `loss`, `restarts`, `maxit`, `seed`, and `leaky_slope`. The predict
 #'   callback is called as `predict(model, newx)` and must return one finite
 #'   numerical score per row.
+#' @param relu_preset Optional quick-start neural candidate grid. Use
+#'   `"affine"`, `"fast"`, `"standard"`, `"flexible"`, or `"nnet"`.
+#'   A preset supplies defaults only: explicitly supplied fine-grained neural
+#'   controls take precedence. Presets define candidates selected by
+#'   policy-value cross-validation; they are not ensembles. Historical
+#'   `relu_*` names cover the generic neural learner for backward
+#'   compatibility.
+#' @param relu_backend_options Named backend-specific options. For
+#'   `relu_backend = "nnet"`, supported entries are `skip`, `rang`,
+#'   `MaxNWts`, `abstol`, `reltol`, `trace`, and `probability_epsilon`.
 #' @param score_tolerance Scores below this absolute value are treated as zero.
 #' @param seed Reproducible seed used by tuning and optimization.
 #'
@@ -85,7 +106,7 @@ odrl_control <- function(
     linear_time_limit = 60,
     linear_relative_gap = 0.01,
     linear_require_gap = FALSE,
-    svm_kernel = c("rbf", "linear"),
+    svm_kernel = "rbf",
     svm_penalty = c(0.01, 0.1, 1),
     svm_rbf_multiplier = c(0.5, 1, 2),
     svm_radius = 1,
@@ -111,25 +132,83 @@ odrl_control <- function(
     svm_polynomial_degree = 2L,
     svm_polynomial_scale = 1,
     svm_polynomial_offset = 1,
-    svm_hinge_mode = c("bounded", "regularized"),
+    svm_hinge_mode = c("auto", "bounded", "regularized"),
     svm_kernel_function = NULL,
     svm_kernel_args = list(),
     relu_architectures = NULL,
     relu_activation = "relu",
     relu_leaky_slope = 0.01,
-    relu_backend = "native") {
+    relu_backend = "native",
+    relu_preset = NULL,
+    relu_backend_options = list()) {
+  neural_explicit <- list(
+    hidden_units = !missing(relu_hidden_units),
+    decay = !missing(relu_decay),
+    restarts = !missing(relu_restarts),
+    refit_restarts = !missing(relu_refit_restarts),
+    maxit = !missing(relu_maxit),
+    selection = !missing(relu_selection),
+    architectures = !missing(relu_architectures),
+    activation = !missing(relu_activation),
+    backend = !missing(relu_backend),
+    backend_options = !missing(relu_backend_options)
+  )
+  if (!is.null(relu_preset)) {
+    preset <- .odrl_neural_preset(relu_preset)
+    if (!neural_explicit$hidden_units && !neural_explicit$architectures) {
+      relu_architectures <- preset$architectures
+    }
+    if (!neural_explicit$decay) relu_decay <- preset$decay
+    if (!neural_explicit$restarts) relu_restarts <- preset$restarts
+    if (!neural_explicit$refit_restarts) {
+      relu_refit_restarts <- preset$refit_restarts
+    }
+    if (!neural_explicit$maxit) relu_maxit <- preset$maxit
+    if (!neural_explicit$selection) relu_selection <- preset$selection
+    if (!neural_explicit$activation) relu_activation <- preset$activation
+    if (!neural_explicit$backend) relu_backend <- preset$backend
+    if (!neural_explicit$backend_options) {
+      relu_backend_options <- preset$backend_options
+    }
+    relu_preset <- preset$name
+  }
+  if (is.character(relu_backend) && length(relu_backend) == 1L &&
+      !is.na(relu_backend) && identical(relu_backend, "nnet")) {
+    if (!neural_explicit$activation) relu_activation <- "sigmoid"
+    if (!is.character(relu_activation) || length(relu_activation) != 1L ||
+        !identical(relu_activation, "sigmoid")) {
+      .odrl_abort(
+        "`relu_backend = \"nnet\"` requires ",
+        "`relu_activation = \"sigmoid\"`."
+      )
+    }
+    if (!is.null(relu_architectures) && any(vapply(
+      relu_architectures, length, integer(1)
+    ) > 1L)) {
+      .odrl_abort(
+        "`relu_backend = \"nnet\"` supports at most one hidden layer per ",
+        "candidate."
+      )
+    }
+  }
   if (is.character(svm_kernel)) {
     if (!length(svm_kernel) || anyNA(svm_kernel)) {
       .odrl_abort("`svm_kernel` must contain a supported kernel name.")
     }
-    svm_kernel <- tolower(svm_kernel[[1L]])
+    svm_kernel <- tolower(gsub("-", "_", svm_kernel[[1L]], fixed = TRUE))
     svm_kernel <- switch(svm_kernel,
-      gaussian = "rbf", poly = "polynomial", svm_kernel
+      gaussian = "rbf", poly = "polynomial", b_spline = "bspline",
+      localpoly = "local_polynomial", svm_kernel
     )
-    if (!svm_kernel %in% c("rbf", "linear", "polynomial", "custom")) {
+    if (!svm_kernel %in% c(
+      "rbf", "linear", "polynomial", "custom", "legendre", "fourier",
+      "bspline", "spline", "haar", "wavelet", "local_polynomial",
+      "local_poly", "partition"
+    )) {
       .odrl_abort(
         "`svm_kernel` must be `\"rbf\"`, `\"linear\"`, `\"polynomial\"`, ",
-        "`\"custom\"`, a kernel function, or a kernel specification list."
+        "a built-in finite-series name, `\"custom\"`, a kernel function, ",
+        "or a kernel/series specification list."
       )
     }
   } else if (!is.function(svm_kernel) && !is.list(svm_kernel)) {
@@ -253,7 +332,12 @@ odrl_control <- function(
   }
   .odrl_check_scalar(relu_leaky_slope, "relu_leaky_slope", 0, 1,
                      open_lower = TRUE)
-  .odrl_relu_backend_spec(relu_backend)
+  if (!is.list(relu_backend_options) || (length(relu_backend_options) &&
+      (is.null(names(relu_backend_options)) ||
+       any(!nzchar(names(relu_backend_options)))))) {
+    .odrl_abort("`relu_backend_options` must be a named list.")
+  }
+  .odrl_relu_backend_spec(relu_backend, relu_backend_options)
   .odrl_check_scalar(score_tolerance, "score_tolerance", 0, Inf,
                      open_lower = TRUE)
   .odrl_check_scalar(seed, "seed", 0, .Machine$integer.max, integer = TRUE)
@@ -298,9 +382,59 @@ odrl_control <- function(
     relu_activation = unique(relu_activation),
     relu_leaky_slope = relu_leaky_slope,
     relu_backend = relu_backend,
+    relu_preset = relu_preset,
+    relu_backend_options = relu_backend_options,
     score_tolerance = score_tolerance,
     seed = as.integer(seed)
   ), class = "odrl_control")
+}
+
+.odrl_neural_preset <- function(preset) {
+  if (!is.character(preset) || length(preset) != 1L || is.na(preset)) {
+    .odrl_abort("`relu_preset` must be NULL or one preset name.")
+  }
+  name <- tolower(gsub("-", "_", preset, fixed = TRUE))
+  name <- switch(name,
+    default = "standard", deep = "flexible", single_layer_nnet = "nnet",
+    name
+  )
+  base <- list(
+    decay = c(0.001, 0.01, 0.1), restarts = 1L, refit_restarts = 3L,
+    maxit = 250L, selection = "one_se", activation = "relu",
+    backend = "native", backend_options = list()
+  )
+  result <- switch(name,
+    affine = utils::modifyList(base, list(
+      architectures = list(integer()), decay = c(0.001, 0.01),
+      activation = "linear"
+    )),
+    fast = utils::modifyList(base, list(
+      architectures = list(integer(), 8L), decay = c(0.001, 0.01)
+    )),
+    standard = utils::modifyList(base, list(
+      architectures = list(integer(), 8L, 16L)
+    )),
+    flexible = utils::modifyList(base, list(
+      architectures = list(integer(), 8L, 16L, c(16L, 8L)),
+      activation = c("relu", "tanh"), restarts = 2L,
+      refit_restarts = 5L, maxit = 300L
+    )),
+    nnet = utils::modifyList(base, list(
+      architectures = list(integer(), 4L, 8L, 16L),
+      decay = c(0, 0.001, 0.01), activation = "sigmoid",
+      backend = "nnet", backend_options = list(skip = TRUE),
+      refit_restarts = 5L, maxit = 300L
+    )),
+    NULL
+  )
+  if (is.null(result)) {
+    .odrl_abort(
+      "Unknown `relu_preset`: ", preset, ". Use `\"affine\"`, `\"fast\"`, ",
+      "`\"standard\"`, `\"flexible\"`, or `\"nnet\"`."
+    )
+  }
+  result$name <- name
+  result
 }
 
 .odrl_validate_control <- function(control) {
