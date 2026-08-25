@@ -147,8 +147,8 @@ gap.
 ## Other kernels and series
 
 Set `svm_kernel` to `"linear"`, `"rbf"`, or `"polynomial"`, or supply a
-custom kernel that is positive semidefinite. The package includes finite
-series score classes with Legendre, Fourier, B-spline, Haar wavelet, and local
+custom kernel that is positive semidefinite. The package includes series score
+classes with Legendre, Fourier, B-spline, Haar wavelet, and local
 polynomial bases:
 
 ```r
