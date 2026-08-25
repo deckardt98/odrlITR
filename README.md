@@ -172,9 +172,10 @@ Series learners use an explicit feature map and avoid that matrix.
 
 ## Neural network policies
 
-`learner = "relu"` supports affine, shallow, and multilayer scores with ReLU,
-leaky ReLU, tanh, sigmoid, or linear activations. Presets provide compact
-candidate grids:
+`learner = "relu"` supports an affine score, a neural network with one hidden
+layer, or a neural network with multiple hidden layers. Available activation
+functions are ReLU, leaky ReLU, tanh, sigmoid, and linear. Presets provide
+compact candidate grids:
 
 ```r
 neural_fit <- odrl(
@@ -190,10 +191,11 @@ and `"nnet"`. Explicit architecture and optimizer settings override a preset.
 
 ## Fitted objects
 
-Use `predict(fit)` for treatment recommendations and
-`predict(fit, type = "score")` for decision scores. `summary(fit)` reports the
-nuisance and policy fit; tuning and optimization details for each learner are
-stored in `fit$policy$diagnostics`.
+Use `predict(fit)` for treatment recommendations. For SVM and neural learners,
+`predict(fit, type = "score")` returns the fitted surrogate score. Exact
+learners define a treatment rule rather than a unique decision score.
+`summary(fit)` reports the nuisance and policy fit; tuning and optimization
+details for each learner are stored in `fit$policy$diagnostics`.
 
 See `vignette("getting-started", package = "odrlITR")` and the
 [function reference](https://github.com/deckardt98/odrlITR/tree/main/man) for
