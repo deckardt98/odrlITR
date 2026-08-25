@@ -168,7 +168,7 @@ series_fit <- odrl(
 ```
 
 Gaussian and custom kernel fits retain a dense training kernel matrix.
-Finite series learners use an explicit feature map and avoid that matrix.
+Series learners use an explicit feature map and avoid that matrix.
 
 ## Neural policies
 
