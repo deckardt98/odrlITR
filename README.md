@@ -144,7 +144,7 @@ Penalizing the constant term is equivalent to using the augmented kernel
 `fit$policy$diagnostics` records convergence, the RKHS norm, and the duality
 gap.
 
-## Other kernels and finite series
+## Other kernels and series
 
 Set `svm_kernel` to `"linear"`, `"rbf"`, or `"polynomial"`, or supply a
 custom kernel that is positive semidefinite. The package includes finite
