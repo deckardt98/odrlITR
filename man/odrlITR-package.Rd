@@ -17,7 +17,6 @@ where treatment is internally coded as \eqn{A\in\{-1,+1\}},
 Useful links:
 \itemize{
   \item \url{https://github.com/deckardt98/odrlITR}
-  \item \url{https://deckardt98.github.io/odrlITR/}
   \item Report bugs at \url{https://github.com/deckardt98/odrlITR/issues}
 }
 

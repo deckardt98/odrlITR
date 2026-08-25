@@ -34,38 +34,29 @@
 #'   `"polynomial"`/`"poly"`. Built-in finite-series shortcuts are
 #'   `"legendre"`, `"fourier"`, `"bspline"`, `"haar"`, and
 #'   `"local_polynomial"`; use [odrl_series_kernel()] for detailed controls.
-#'   A kernel may also be a function `function(x, y)` or a list with `name`,
-#'   `fun`, and optional `args`. The caller is responsible for a custom
-#'   kernel's symmetry and positive semidefiniteness.
-#' @param svm_penalty Positive regularization grid for kernel-surrogate fits.
+#'   A custom kernel may be a function `function(x, y)` or a list with `name`,
+#'   `fun`, and optional `args`; it must be symmetric and positive semidefinite.
+#' @param svm_penalty Positive regularization grid for kernel-surrogate fits,
+#'   including clipped bounded-hinge SVMs.
 #' @param svm_rbf_multiplier Positive multipliers of the median squared
 #'   pairwise distance.
-#' @param svm_radius RKHS-radius grid for bounded-hinge fits. Values must not
-#'   exceed one.
 #' @param svm_folds Number of ODRL-criterion cross-validation folds.
-#' @param svm_maxit Maximum optimizer iterations for each regularized
-#'   kernel-surrogate fit. A nonconverged fit is retried once from its
-#'   incumbent with `max(3 * svm_maxit, svm_maxit + 100)` iterations.
+#' @param svm_maxit Maximum optimizer iterations for each kernel-surrogate fit.
 #' @param svm_polynomial_degree Positive integer degree grid.
 #' @param svm_polynomial_scale Positive polynomial-kernel scale.
 #' @param svm_polynomial_offset Nonnegative polynomial-kernel offset.
-#' @param svm_hinge_mode `"auto"` uses the globally bounded construction for
-#'   Gaussian/RBF hinge fits and ordinary regularized hinge fitting otherwise.
-#'   `"bounded"` explicitly requests the globally bounded RBF construction;
-#'   `"regularized"` enables ordinary hinge fitting with any supported score
-#'   class.
+#' @param svm_hinge_mode `"auto"` clips Gaussian/RBF hinge scores to
+#'   `[-1,1]`; `"bounded"` clips hinge scores for any supported kernel;
+#'   `"regularized"` returns the ordinary unbounded hinge score.
 #' @param svm_kernel_function Function used with `svm_kernel = "custom"`.
 #' @param svm_kernel_args Named arguments passed to a custom kernel function.
-#' @param relu_hidden_units Integer vector of one-hidden-layer widths. Include
-#'   zero to add an affine score candidate. This backward-compatible shortcut
-#'   is ignored when `relu_architectures` is supplied.
+#' @param relu_hidden_units One-hidden-layer width grid. Zero adds an affine
+#'   candidate. Ignored when `relu_architectures` is supplied.
 #' @param relu_decay Nonnegative weight-decay grid.
 #' @param relu_folds Number of ODRL-criterion cross-validation folds.
 #' @param relu_restarts Random starts per cross-validation fit.
 #' @param relu_refit_restarts Random starts for the final ReLU refit.
-#' @param relu_maxit Maximum optimizer iterations per initial ReLU start. If
-#'   no start converges, the best incumbent is retried once with
-#'   `max(3 * relu_maxit, relu_maxit + 100)` iterations.
+#' @param relu_maxit Maximum optimizer iterations per neural-network start.
 #' @param relu_selection Select the best criterion candidate or use a one-standard-
 #'   error rule favoring smaller networks and stronger decay.
 #' @param relu_architectures Optional list of hidden-layer width vectors. Use
@@ -74,21 +65,12 @@
 #' @param relu_activation Activation grid: `"relu"`, `"leaky_relu"`, `"tanh"`,
 #'   `"sigmoid"`, or `"linear"`.
 #' @param relu_leaky_slope Negative-side slope for leaky ReLU.
-#' @param relu_backend `"native"`, `"nnet"`, or a list containing `name`,
-#'   `fit`, and `predict` callbacks for an external neural-network engine.
-#'   The `"nnet"` backend supports logistic loss with an affine score or one
-#'   sigmoid hidden layer. The fit
-#'   callback receives `x`, `score`, `architecture`, `activation`, `decay`,
-#'   `loss`, `restarts`, `maxit`, `seed`, and `leaky_slope`. The predict
-#'   callback is called as `predict(model, newx)` and must return one finite
-#'   numerical score per row.
+#' @param relu_backend `"native"`, `"nnet"`, or a list with `name`, `fit`,
+#'   and `predict` callbacks. The `"nnet"` backend supports logistic loss with
+#'   an affine score or one sigmoid hidden layer.
 #' @param relu_preset Optional quick-start neural candidate grid. Use
 #'   `"affine"`, `"fast"`, `"standard"`, `"flexible"`, or `"nnet"`.
-#'   A preset supplies defaults only: explicitly supplied fine-grained neural
-#'   controls take precedence. Presets define candidates selected by
-#'   policy-value cross-validation; they are not ensembles. Historical
-#'   `relu_*` names cover the generic neural learner for backward
-#'   compatibility.
+#'   Explicit neural controls override the preset.
 #' @param relu_backend_options Named backend-specific options. For
 #'   `relu_backend = "nnet"`, supported entries are `skip`, `rang`,
 #'   `MaxNWts`, `abstol`, `reltol`, `trace`, and `probability_epsilon`.
@@ -109,7 +91,6 @@ odrl_control <- function(
     svm_kernel = "rbf",
     svm_penalty = c(0.01, 0.1, 1),
     svm_rbf_multiplier = c(0.5, 1, 2),
-    svm_radius = 1,
     svm_folds = 3L,
     svm_maxit = 300L,
     relu_hidden_units = c(0L, 8L, 16L),
@@ -280,10 +261,6 @@ odrl_control <- function(
       any(svm_rbf_multiplier <= 0)) {
     .odrl_abort("`svm_rbf_multiplier` must be positive.")
   }
-  if (!length(svm_radius) || any(!is.finite(svm_radius)) ||
-      any(svm_radius <= 0 | svm_radius > 1)) {
-    .odrl_abort("`svm_radius` must lie in (0,1].")
-  }
   .odrl_check_scalar(svm_folds, "svm_folds", 2, Inf, integer = TRUE)
   .odrl_check_scalar(svm_maxit, "svm_maxit", 1, Inf, integer = TRUE)
   if (!length(svm_polynomial_degree) ||
@@ -362,7 +339,6 @@ odrl_control <- function(
     svm_kernel = svm_kernel,
     svm_penalty = sort(unique(svm_penalty)),
     svm_rbf_multiplier = sort(unique(svm_rbf_multiplier)),
-    svm_radius = sort(unique(svm_radius)),
     svm_folds = as.integer(svm_folds),
     svm_maxit = as.integer(svm_maxit),
     svm_polynomial_degree = sort(unique(as.integer(svm_polynomial_degree))),

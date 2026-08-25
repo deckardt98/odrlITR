@@ -4,7 +4,6 @@
       kernel %in% c("rbf", "linear")) kernel else "rbf",
     svm_rbf_multiplier = 1,
     svm_penalty = 0.1,
-    svm_radius = 1,
     svm_folds = 2,
     svm_maxit = 200,
     seed = 31
@@ -80,6 +79,42 @@ test_that("squared hinge works with linear and polynomial kernels", {
   )))
 })
 
+test_that("bounded linear hinge fits first and clips second", {
+  x <- sqrt(2) * diag(2)
+  score <- c(1, -1)
+  control <- odrl_control(
+    svm_kernel = "linear", svm_hinge_mode = "bounded",
+    svm_penalty = 1, svm_folds = 2, svm_maxit = 500
+  )
+  fit <- odrlITR:::.odrl_fit_svm_candidate(
+    x, score, control, "hinge",
+    candidate = list(multiplier = 1, lambda = 1), seed = 47
+  )
+
+  expect_equal(fit$intercept, 0, tolerance = 1e-6)
+  expect_equal(fit$alpha, c(0.5, -0.5), tolerance = 1e-5)
+  expect_equal(fit$objective, 0.75, tolerance = 1e-6)
+  expect_equal(fit$rkhs_norm, sqrt(0.5), tolerance = 1e-5)
+  expect_identical(fit$clipping, "hard_tanh")
+  expect_true(fit$globally_bounded)
+
+  newx <- matrix(c(10 * sqrt(2), 0), nrow = 1)
+  raw <- odrlITR:::.odrl_predict_kernel_unclipped(fit, newx)
+  bounded <- odrlITR:::.odrl_predict_kernel_raw(fit, newx)
+  expect_equal(raw, 5, tolerance = 1e-5)
+  expect_equal(bounded, 1)
+  expect_equal(sign(raw), sign(bounded))
+
+  kink_fit <- odrlITR:::.odrl_fit_svm_candidate(
+    x, score, control, "hinge",
+    candidate = list(multiplier = 1, lambda = 0.01), seed = 48
+  )
+  expect_equal(kink_fit$convergence, 0)
+  expect_equal(kink_fit$alpha, c(1, -1), tolerance = 1e-5)
+  expect_equal(kink_fit$objective, 0.01, tolerance = 1e-6)
+  expect_lt(kink_fit$duality_gap, 1e-6)
+})
+
 test_that("custom kernel and signed-margin loss are validated and retained", {
   set.seed(52)
   x <- matrix(rnorm(72), ncol = 2)
@@ -119,7 +154,7 @@ test_that("custom loss labels never select built-in hinge semantics", {
     gradient = function(margin) -2 * (1 - margin)
   )
   control <- .svm_flex_control("rbf")
-  grid <- odrlITR:::.odrl_kernel_grid(control, custom_hinge_label)
+  grid <- odrlITR:::.odrl_kernel_grid(control)
   expect_true("lambda" %in% names(grid))
   expect_false("radius" %in% names(grid))
 

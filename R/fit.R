@@ -74,48 +74,38 @@
 
 #' Fit an orthogonal double-residual treatment rule
 #'
-#' `odrl()` estimates or accepts the two ODRL nuisances, constructs pooled
-#' out-of-fold double-residual scores, and fits one policy. The direct learners
-#' optimize the empirical binary objective over a bounded-margin affine class
-#' or the candidate shallow-tree class searched by `policytree`.
-#' Surrogate learners support hinge, exponential, logistic, squared-hinge, and
-#' custom differentiable margin losses over configurable RKHS or
-#' neural-network score classes.
+#' `odrl()` cross-fits or accepts the propensity and marginal-outcome
+#' nuisances, forms double-residual scores, and fits one treatment rule.
+#' Available policy classes are affine rules, shallow trees, kernel or
+#' finite-series scores, and neural networks.
 #'
 #' @param x Covariate matrix or data frame.
 #' @param a Binary treatment. Numeric values may be `{0,1}` or `{-1,+1}`.
 #' @param y Numeric outcome, with larger values preferred.
-#' @param learner One of `"tree"`, `"linear"`, `"svm"`, or `"relu"`. The
-#'   historical `"relu"` name denotes the generic neural learner and may use
-#'   non-ReLU activations or a user-supplied backend.
+#' @param learner One of `"tree"`, `"linear"`, `"svm"`, or `"relu"`.
+#'   The `"relu"` learner also supports other activations and backends.
 #' @param loss `"exact"` for tree/linear; `"hinge"`, `"exponential"`,
 #'   `"logistic"`, or `"squared_hinge"` for SVM/neural learners; or a custom
 #'   differentiable signed-margin loss. SVM custom losses use a list with
-#'   `value` and `gradient` functions. Neural custom losses may use the same
-#'   list or a function returning `list(loss, gradient)`. If `NULL`, direct
-#'   learners use exact loss and surrogate learners use hinge loss. The caller
-#'   is responsible for the mathematical properties of a custom loss,
-#'   including convexity when a convex kernel-surrogate problem is intended.
+#'   `value` and `gradient` functions. Neural custom losses may use that list
+#'   or a function returning `list(loss, gradient)`. If `NULL`, direct
+#'   learners use exact loss and surrogate learners use hinge loss.
 #' @param nuisance `NULL`/`"superlearner"` for cross-fitted Super Learner,
 #'   `"parametric"`/`"glm"` for cross-fitted logistic treatment and linear
 #'   outcome models, an [odrl_nuisance_user()] object, a list containing `m`
 #'   plus `pi` or `e`, or a function `function(x, a, y)` returning one of those
 #'   objects.
 #' @param nuisance_folds Number of outer nuisance cross-fitting folds.
-#' @param nuisance_fold_id Optional row-aligned user-specified outer-fold
-#'   identifiers. When omitted, built-in folds are treatment-stratified and
-#'   balanced to differ in total size by at most one row. User folds must leave
-#'   at least two observations in every outer training set and, when the
-#'   propensity is estimated, at least two observations from each arm.
+#' @param nuisance_fold_id Optional row-aligned outer-fold identifiers.
+#'   Otherwise, treatment-stratified folds are generated.
 #' @param sl.library Library passed to [odrl_nuisance_sl()].
 #' @param sl.library.pi Optional propensity-specific Super Learner library.
 #' @param sl.library.m Optional marginal-outcome-specific Super Learner library.
 #' @param sl_inner_folds Super Learner's inner cross-validation folds.
 #' @param known_pi,known_e Optional known propensity on the probability or
 #'   `E(A|X)` scale. This enables randomized-trial use while cross-fitting `m`.
-#' @param propensity_bounds Optional two-element numerical safeguard. `NULL`
-#'   performs no propensity clipping because the ODRL score does not divide by
-#'   the propensity.
+#' @param propensity_bounds Optional two-element limits for propensity
+#'   predictions. `NULL` performs no clipping.
 #' @param positive For factor/character treatment, the level representing
 #'   treatment `+1`. The second factor level is used by default.
 #' @param control Computational settings from [odrl_control()].
@@ -144,16 +134,18 @@
 #' @export
 #'
 #' @examples
-#' data <- odrl_simulate(250, boundary = "tree", seed = 4)
+#' data <- odrl_simulate(100, boundary = "linear", seed = 4)
 #' nuisance <- odrl_nuisance_user(
 #'   m = data$m, pi = data$pi, source = "known simulation truth",
 #'   out_of_fold = TRUE
 #' )
-#' if (requireNamespace("policytree", quietly = TRUE)) {
-#'   fit <- odrl(data$x, data$a, data$y, learner = "tree",
-#'               nuisance = nuisance)
-#'   predict(fit, data$x[1:5, ])
-#' }
+#' fit <- odrl(
+#'   data$x, data$a, data$y, learner = "svm", nuisance = nuisance,
+#'   control = odrl_control(
+#'     svm_penalty = 0.1, svm_rbf_multiplier = 1, svm_folds = 2
+#'   )
+#' )
+#' predict(fit, data$x[1:5, ])
 odrl <- function(
     x, a, y,
     learner = c("tree", "linear", "svm", "relu"),

@@ -297,42 +297,99 @@
   ), class = c("odrl_surrogate_loss", "list"))
 }
 
-.odrl_fit_kernel_hinge <- function(x, score, kernel, multiplier, radius,
-                                   seed, control = NULL,
+.odrl_finalize_bounded_hinge <- function(fit) {
+  raw <- fit$fitted
+  fit$fitted_unclipped <- raw
+  fit$fitted <- .odrl_hardtanh(raw)
+  fit$globally_bounded <- TRUE
+  fit$bounded_output <- TRUE
+  fit$hinge_mode <- "bounded"
+  fit$clipping <- "hard_tanh"
+  fit
+}
+
+.odrl_fit_kernel_hinge <- function(x, score, kernel, multiplier, lambda,
+                                   maxit, seed, control = NULL,
                                    candidate = list()) {
-  spec <- .odrl_resolve_kernel(kernel, control = control,
-                               candidate = candidate)
-  if (!.odrl_builtin_kernel(spec, "rbf")) {
-    .odrl_abort(
-      "The globally bounded RKHS-radius hinge fit requires a Gaussian/RBF ",
-      "kernel. Set `svm_hinge_mode = \"regularized\"` to use hinge loss ",
-      "with another kernel."
-    )
+  spec <- .odrl_resolve_kernel(
+    kernel, control = control, candidate = candidate
+  )
+  bandwidth2 <- if (.odrl_builtin_kernel(spec, "rbf")) {
+    .odrl_median_squared_distance(x, seed) * multiplier
+  } else {
+    NA_real_
   }
-  bandwidth2 <- .odrl_median_squared_distance(x, seed) * multiplier
   k <- .odrl_kernel_matrix(x, kernel = spec, bandwidth2 = bandwidth2)
-  direction <- score / length(score)
-  norm <- sqrt(max(drop(crossprod(direction, k %*% direction)), 0))
-  alpha <- if (norm <= 1e-14) rep(0, length(score)) else {
-    radius * direction / norm
+  if (nrow(k) == ncol(k) &&
+      max(abs(k - t(k))) > 1e-7 * max(1, max(abs(k)))) {
+    .odrl_abort("The training kernel matrix must be symmetric.")
   }
-  fitted <- drop(k %*% alpha)
-  bounded <- .odrl_hardtanh(fitted)
-  list(
+  label <- ifelse(score >= 0, 1, -1)
+  scale <- mean(abs(score))
+  weight <- if (is.finite(scale) && scale > 0) {
+    abs(score) / scale
+  } else {
+    rep(1, length(score))
+  }
+  upper <- weight / length(score)
+  active <- which(upper > 0)
+  # Penalizing the constant offset is equivalent to using the kernel K + 1.
+  augmented <- k + 1
+  dual_fit <- NULL
+  u <- numeric(length(score))
+  if (length(active)) {
+    active_kernel <- augmented[active, active, drop = FALSE]
+    active_label <- label[active]
+    objective <- function(active_u) {
+      signed <- active_u * active_label
+      0.5 * drop(crossprod(signed, active_kernel %*% signed)) / lambda -
+        sum(active_u)
+    }
+    gradient <- function(active_u) {
+      signed <- active_u * active_label
+      active_label * drop(active_kernel %*% signed) / lambda - 1
+    }
+    set.seed(seed)
+    dual_fit <- stats::optim(
+      par = upper[active] / 2, fn = objective, gr = gradient,
+      method = "L-BFGS-B", lower = 0, upper = upper[active],
+      control = list(maxit = maxit, factr = 1e8)
+    )
+    u[active] <- pmin(pmax(dual_fit$par, 0), upper[active])
+  }
+  signed <- u * label
+  intercept <- sum(signed) / lambda
+  alpha <- signed / lambda
+  fitted <- intercept + drop(k %*% alpha)
+  norm_squared <- max(
+    intercept^2 + drop(crossprod(alpha, k %*% alpha)), 0
+  )
+  primal <- mean(weight * pmax(1 - label * fitted, 0)) +
+    0.5 * lambda * norm_squared
+  dual <- sum(u) -
+    0.5 * drop(crossprod(signed, augmented %*% signed)) / lambda
+  fit <- list(
+    intercept = intercept,
     alpha = alpha,
     training_x = x,
     kernel_spec = spec,
     bandwidth2 = bandwidth2,
-    radius = radius,
-    fitted = bounded,
-    fitted_unclipped = fitted,
-    convergence = 0L,
-    objective = -mean(score * bounded),
-    rkhs_norm = if (norm <= 1e-14) 0 else radius,
-    globally_bounded = TRUE,
-    bounded_output = TRUE,
-    hinge_mode = "bounded"
+    lambda = lambda,
+    loss = "hinge",
+    loss_spec = .odrl_resolve_surrogate_loss("hinge"),
+    fitted = fitted,
+    convergence = dual_fit$convergence %||% 0L,
+    message = dual_fit$message %||% NULL,
+    attempts = 1L,
+    objective = primal,
+    dual_objective = dual,
+    duality_gap = max(primal - dual, 0),
+    rkhs_norm = sqrt(norm_squared),
+    globally_bounded = FALSE,
+    bounded_output = FALSE,
+    hinge_mode = "regularized"
   )
+  fit
 }
 
 .odrl_fit_kernel_surrogate <- function(x, score, kernel, multiplier, lambda,
@@ -414,21 +471,15 @@
     message = fit$message,
     attempts = attempts,
     objective = fit$value,
+    rkhs_norm = sqrt(max(
+      fit$par[[1L]]^2 +
+        drop(crossprod(fit$par[-1L], k %*% fit$par[-1L])),
+      0
+    )),
     globally_bounded = FALSE,
     bounded_output = FALSE,
     hinge_mode = if (isTRUE(loss_spec$builtin) &&
       identical(loss_spec$name, "hinge")) "regularized" else NULL
-  )
-}
-
-# Retain the old internal entry point for downstream code that used it.
-.odrl_fit_kernel_logistic <- function(x, score, kernel, multiplier, lambda,
-                                      maxit, seed, control = NULL,
-                                      candidate = list()) {
-  .odrl_fit_kernel_surrogate(
-    x = x, score = score, kernel = kernel, multiplier = multiplier,
-    lambda = lambda, maxit = maxit, seed = seed, loss = "logistic",
-    control = control, candidate = candidate
   )
 }
 
@@ -443,18 +494,16 @@
   (fit$intercept %||% 0) + drop(k %*% fit$alpha)
 }
 
-.odrl_predict_kernel_raw <- function(fit, newx, kernel = NULL, loss = NULL) {
+.odrl_predict_kernel_raw <- function(fit, newx, kernel = NULL) {
   raw <- .odrl_predict_kernel_unclipped(fit, newx, kernel)
-  if (isTRUE(fit$bounded_output) ||
-      (is.null(fit$bounded_output) && identical(loss, "hinge"))) {
+  if (isTRUE(fit$bounded_output)) {
     .odrl_hardtanh(raw)
   } else {
     raw
   }
 }
 
-.odrl_kernel_grid <- function(control, loss) {
-  loss_spec <- .odrl_resolve_surrogate_loss(loss)
+.odrl_kernel_grid <- function(control) {
   kernel_spec <- .odrl_resolve_kernel(control$svm_kernel, control = control)
   multiplier <- if (.odrl_builtin_kernel(kernel_spec, "rbf")) {
     control$svm_rbf_multiplier
@@ -466,13 +515,6 @@
   } else {
     NA_integer_
   }
-  hinge_mode <- .odrl_effective_hinge_mode(
-    kernel_spec, control$svm_hinge_mode %||% "auto"
-  )
-  bounded_hinge <- isTRUE(loss_spec$builtin) &&
-    identical(loss_spec$name, "hinge") &&
-    .odrl_builtin_kernel(kernel_spec, "rbf") &&
-    identical(hinge_mode, "bounded")
   base <- if (inherits(kernel_spec, "odrl_series_kernel")) {
     .odrl_series_grid(kernel_spec)
   } else if (.odrl_builtin_kernel(kernel_spec, "polynomial")) {
@@ -485,17 +527,10 @@
   } else {
     data.frame(multiplier = multiplier)
   }
-  if (bounded_hinge) {
-    merge(
-      base, data.frame(radius = control$svm_radius), by = NULL,
-      sort = FALSE
-    )
-  } else {
-    merge(
-      base, data.frame(lambda = rev(control$svm_penalty)), by = NULL,
-      sort = FALSE
-    )
-  }
+  merge(
+    base, data.frame(lambda = rev(control$svm_penalty)), by = NULL,
+    sort = FALSE
+  )
 }
 
 .odrl_fit_svm_candidate <- function(x, score, control, loss, candidate, seed) {
@@ -508,19 +543,22 @@
   )
   bounded_hinge <- isTRUE(loss_spec$builtin) &&
     identical(loss_spec$name, "hinge") &&
-    .odrl_builtin_kernel(kernel_spec, "rbf") &&
     identical(hinge_mode, "bounded")
   if (inherits(kernel_spec, "odrl_series_kernel")) {
-    .odrl_fit_series_surrogate(
+    fit <- .odrl_fit_series_surrogate(
       x = x, score = score, spec = kernel_spec, candidate = candidate,
       lambda = candidate$lambda, maxit = control$svm_maxit, seed = seed,
       loss = loss_spec
     )
-  } else if (bounded_hinge) {
-    .odrl_fit_kernel_hinge(
+    if (bounded_hinge) .odrl_finalize_bounded_hinge(fit) else fit
+  } else if (isTRUE(loss_spec$builtin) &&
+      identical(loss_spec$name, "hinge")) {
+    fit <- .odrl_fit_kernel_hinge(
       x, score, kernel_spec, candidate$multiplier,
-      candidate$radius, seed, control = control, candidate = candidate
+      candidate$lambda, control$svm_maxit, seed,
+      control = control, candidate = candidate
     )
+    if (bounded_hinge) .odrl_finalize_bounded_hinge(fit) else fit
   } else {
     .odrl_fit_kernel_surrogate(
       x, score, kernel_spec, candidate$multiplier,
@@ -538,18 +576,9 @@
   hinge_mode <- .odrl_effective_hinge_mode(
     kernel_spec, control$svm_hinge_mode %||% "auto"
   )
-  if (isTRUE(loss_spec$builtin) && identical(loss_spec$name, "hinge") &&
-      identical(hinge_mode, "bounded") &&
-      !.odrl_builtin_kernel(kernel_spec, "rbf")) {
-    .odrl_abort(
-      "`svm_hinge_mode = \"bounded\"` requires a Gaussian/RBF kernel. ",
-      "Use `svm_hinge_mode = \"regularized\"` for hinge loss with other ",
-      "kernels."
-    )
-  }
   folds <- min(control$svm_folds, nrow(x))
   fold_id <- .odrl_score_folds(score, folds, control$seed + 300L)
-  grid <- .odrl_kernel_grid(control, loss_spec)
+  grid <- .odrl_kernel_grid(control)
   criterion <- matrix(NA_real_, nrow(grid), folds)
   convergence <- matrix(NA_integer_, nrow(grid), folds)
   started <- proc.time()[["elapsed"]]
@@ -645,9 +674,10 @@
       series_features = final$series_map$feature_count %||% NA_integer_,
       custom_loss = !isTRUE(loss_spec$builtin),
       hinge_mode = final$hinge_mode %||% NA_character_,
+      clipping = final$clipping %||% NA_character_,
       globally_bounded = isTRUE(final$globally_bounded),
       rkhs_norm = final$rkhs_norm %||% NA_real_,
-      radius = final$radius %||% NA_real_,
+      duality_gap = final$duality_gap %||% NA_real_,
       max_training_abs_unclipped = if (isTRUE(final$bounded_output)) {
         max(abs(final$fitted_unclipped))
       } else {

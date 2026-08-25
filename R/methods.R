@@ -3,8 +3,9 @@
 #' `type = "action"` returns treatment recommendations in the coding used to
 #' fit the model. `type = "score"` returns the real-valued decision score for
 #' affine and surrogate learners. Trees and constant policies have no unique
-#' real-valued score, so their signed action is returned. A zero score always
-#' maps to the positive treatment.
+#' real-valued score, so their signed action is returned. Bounded-hinge SVM
+#' scores are hard-tanh clipped to `[-1,1]`. A zero score maps to the positive
+#' treatment.
 #'
 #' @param object An [odrl()] fit.
 #' @param newdata New covariates in the same representation used for fitting.

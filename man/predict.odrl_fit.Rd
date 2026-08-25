@@ -22,6 +22,7 @@ A vector of treatment actions or numeric decision scores.
 \code{type = "action"} returns treatment recommendations in the coding used to
 fit the model. \code{type = "score"} returns the real-valued decision score for
 affine and surrogate learners. Trees and constant policies have no unique
-real-valued score, so their signed action is returned. A zero score always
-maps to the positive treatment.
+real-valued score, so their signed action is returned. Bounded-hinge SVM
+scores are hard-tanh clipped to \verb{[-1,1]}. A zero score maps to the positive
+treatment.
 }

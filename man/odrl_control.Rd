@@ -16,7 +16,6 @@ odrl_control(
   svm_kernel = "rbf",
   svm_penalty = c(0.01, 0.1, 1),
   svm_rbf_multiplier = c(0.5, 1, 2),
-  svm_radius = 1,
   svm_folds = 3L,
   svm_maxit = 300L,
   relu_hidden_units = c(0L, 8L, 16L),
@@ -79,27 +78,21 @@ are \code{"rbf"}/\code{"gaussian"}, \code{"linear"}, and
 \code{"polynomial"}/\code{"poly"}. Built-in finite-series shortcuts are
 \code{"legendre"}, \code{"fourier"}, \code{"bspline"}, \code{"haar"}, and
 \code{"local_polynomial"}; use \code{\link[=odrl_series_kernel]{odrl_series_kernel()}} for detailed controls.
-A kernel may also be a function \verb{function(x, y)} or a list with \code{name},
-\code{fun}, and optional \code{args}. The caller is responsible for a custom
-kernel's symmetry and positive semidefiniteness.}
+A custom kernel may be a function \verb{function(x, y)} or a list with \code{name},
+\code{fun}, and optional \code{args}; it must be symmetric and positive semidefinite.}
 
-\item{svm_penalty}{Positive regularization grid for kernel-surrogate fits.}
+\item{svm_penalty}{Positive regularization grid for kernel-surrogate fits,
+including clipped bounded-hinge SVMs.}
 
 \item{svm_rbf_multiplier}{Positive multipliers of the median squared
 pairwise distance.}
 
-\item{svm_radius}{RKHS-radius grid for bounded-hinge fits. Values must not
-exceed one.}
-
 \item{svm_folds}{Number of ODRL-criterion cross-validation folds.}
 
-\item{svm_maxit}{Maximum optimizer iterations for each regularized
-kernel-surrogate fit. A nonconverged fit is retried once from its
-incumbent with \code{max(3 * svm_maxit, svm_maxit + 100)} iterations.}
+\item{svm_maxit}{Maximum optimizer iterations for each kernel-surrogate fit.}
 
-\item{relu_hidden_units}{Integer vector of one-hidden-layer widths. Include
-zero to add an affine score candidate. This backward-compatible shortcut
-is ignored when \code{relu_architectures} is supplied.}
+\item{relu_hidden_units}{One-hidden-layer width grid. Zero adds an affine
+candidate. Ignored when \code{relu_architectures} is supplied.}
 
 \item{relu_decay}{Nonnegative weight-decay grid.}
 
@@ -109,9 +102,7 @@ is ignored when \code{relu_architectures} is supplied.}
 
 \item{relu_refit_restarts}{Random starts for the final ReLU refit.}
 
-\item{relu_maxit}{Maximum optimizer iterations per initial ReLU start. If
-no start converges, the best incumbent is retried once with
-\code{max(3 * relu_maxit, relu_maxit + 100)} iterations.}
+\item{relu_maxit}{Maximum optimizer iterations per neural-network start.}
 
 \item{relu_selection}{Select the best criterion candidate or use a one-standard-
 error rule favoring smaller networks and stronger decay.}
@@ -148,11 +139,9 @@ represented by dedicated arguments cannot be overridden here.}
 
 \item{svm_polynomial_offset}{Nonnegative polynomial-kernel offset.}
 
-\item{svm_hinge_mode}{\code{"auto"} uses the globally bounded construction for
-Gaussian/RBF hinge fits and ordinary regularized hinge fitting otherwise.
-\code{"bounded"} explicitly requests the globally bounded RBF construction;
-\code{"regularized"} enables ordinary hinge fitting with any supported score
-class.}
+\item{svm_hinge_mode}{\code{"auto"} clips Gaussian/RBF hinge scores to
+\verb{[-1,1]}; \code{"bounded"} clips hinge scores for any supported kernel;
+\code{"regularized"} returns the ordinary unbounded hinge score.}
 
 \item{svm_kernel_function}{Function used with \code{svm_kernel = "custom"}.}
 
@@ -167,22 +156,13 @@ class.}
 
 \item{relu_leaky_slope}{Negative-side slope for leaky ReLU.}
 
-\item{relu_backend}{\code{"native"}, \code{"nnet"}, or a list containing \code{name},
-\code{fit}, and \code{predict} callbacks for an external neural-network engine.
-The \code{"nnet"} backend supports logistic loss with an affine score or one
-sigmoid hidden layer. The fit
-callback receives \code{x}, \code{score}, \code{architecture}, \code{activation}, \code{decay},
-\code{loss}, \code{restarts}, \code{maxit}, \code{seed}, and \code{leaky_slope}. The predict
-callback is called as \code{predict(model, newx)} and must return one finite
-numerical score per row.}
+\item{relu_backend}{\code{"native"}, \code{"nnet"}, or a list with \code{name}, \code{fit},
+and \code{predict} callbacks. The \code{"nnet"} backend supports logistic loss with
+an affine score or one sigmoid hidden layer.}
 
 \item{relu_preset}{Optional quick-start neural candidate grid. Use
 \code{"affine"}, \code{"fast"}, \code{"standard"}, \code{"flexible"}, or \code{"nnet"}.
-A preset supplies defaults only: explicitly supplied fine-grained neural
-controls take precedence. Presets define candidates selected by
-policy-value cross-validation; they are not ensembles. Historical
-\verb{relu_*} names cover the generic neural learner for backward
-compatibility.}
+Explicit neural controls override the preset.}
 
 \item{relu_backend_options}{Named backend-specific options. For
 \code{relu_backend = "nnet"}, supported entries are \code{skip}, \code{rang},

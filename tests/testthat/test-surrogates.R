@@ -2,7 +2,6 @@
   odrl_control(
     svm_rbf_multiplier = 1,
     svm_penalty = 0.1,
-    svm_radius = 1,
     svm_folds = 2,
     svm_maxit = 150,
     relu_hidden_units = c(0, 3),
@@ -15,7 +14,7 @@
   )
 }
 
-test_that("bounded Gaussian hinge scores are globally bounded", {
+test_that("bounded Gaussian hinge scores use hard-tanh clipping", {
   dat <- odrl_simulate(60, seed = 2)
   nuisance <- odrl_nuisance_user(
     m = dat$m, pi = dat$pi, out_of_fold = TRUE
@@ -33,8 +32,11 @@ test_that("bounded Gaussian hinge scores are globally bounded", {
   raw <- odrlITR:::.odrl_predict_kernel_unclipped(
     fit$policy$fit, z, fit$policy$kernel
   )
-  expect_lte(max(abs(raw)), fit$policy$fit$radius + 1e-8)
-  expect_lte(fit$policy$fit$rkhs_norm, fit$policy$fit$radius + 1e-8)
+  expect_equal(score, odrlITR:::.odrl_hardtanh(raw), tolerance = 1e-8)
+  expect_identical(fit$policy$diagnostics$hinge_mode, "bounded")
+  expect_identical(fit$policy$diagnostics$clipping, "hard_tanh")
+  expect_true(is.finite(fit$policy$fit$rkhs_norm))
+  expect_true("lambda" %in% names(fit$policy$selected))
 })
 
 test_that("kernel logistic returns finite scores", {

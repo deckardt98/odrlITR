@@ -33,18 +33,15 @@ odrl(
 
 \item{y}{Numeric outcome, with larger values preferred.}
 
-\item{learner}{One of \code{"tree"}, \code{"linear"}, \code{"svm"}, or \code{"relu"}. The
-historical \code{"relu"} name denotes the generic neural learner and may use
-non-ReLU activations or a user-supplied backend.}
+\item{learner}{One of \code{"tree"}, \code{"linear"}, \code{"svm"}, or \code{"relu"}.
+The \code{"relu"} learner also supports other activations and backends.}
 
 \item{loss}{\code{"exact"} for tree/linear; \code{"hinge"}, \code{"exponential"},
 \code{"logistic"}, or \code{"squared_hinge"} for SVM/neural learners; or a custom
 differentiable signed-margin loss. SVM custom losses use a list with
-\code{value} and \code{gradient} functions. Neural custom losses may use the same
-list or a function returning \code{list(loss, gradient)}. If \code{NULL}, direct
-learners use exact loss and surrogate learners use hinge loss. The caller
-is responsible for the mathematical properties of a custom loss,
-including convexity when a convex kernel-surrogate problem is intended.}
+\code{value} and \code{gradient} functions. Neural custom losses may use that list
+or a function returning \code{list(loss, gradient)}. If \code{NULL}, direct
+learners use exact loss and surrogate learners use hinge loss.}
 
 \item{nuisance}{\code{NULL}/\code{"superlearner"} for cross-fitted Super Learner,
 \code{"parametric"}/\code{"glm"} for cross-fitted logistic treatment and linear
@@ -65,9 +62,8 @@ objects.}
 \item{known_pi, known_e}{Optional known propensity on the probability or
 \code{E(A|X)} scale. This enables randomized-trial use while cross-fitting \code{m}.}
 
-\item{propensity_bounds}{Optional two-element numerical safeguard. \code{NULL}
-performs no propensity clipping because the ODRL score does not divide by
-the propensity.}
+\item{propensity_bounds}{Optional two-element limits for propensity
+predictions. \code{NULL} performs no clipping.}
 
 \item{positive}{For factor/character treatment, the level representing
 treatment \code{+1}. The second factor level is used by default.}
@@ -78,11 +74,8 @@ treatment \code{+1}. The second factor level is used by default.}
 
 \item{sl_env}{Environment for custom Super Learner wrappers.}
 
-\item{nuisance_fold_id}{Optional row-aligned user-specified outer-fold
-identifiers. When omitted, built-in folds are treatment-stratified and
-balanced to differ in total size by at most one row. User folds must leave
-at least two observations in every outer training set and, when the
-propensity is estimated, at least two observations from each arm.}
+\item{nuisance_fold_id}{Optional row-aligned outer-fold identifiers.
+Otherwise, treatment-stratified folds are generated.}
 }
 \value{
 An object of class \code{odrl_fit}, a list with the following principal
@@ -106,23 +99,22 @@ dimensions \code{n} and \code{p}, and elapsed \code{runtime}. Use \code{\link[=p
 than relying on learner-specific internals.
 }
 \description{
-\code{odrl()} estimates or accepts the two ODRL nuisances, constructs pooled
-out-of-fold double-residual scores, and fits one policy. The direct learners
-optimize the empirical binary objective over a bounded-margin affine class
-or the candidate shallow-tree class searched by \code{policytree}.
-Surrogate learners support hinge, exponential, logistic, squared-hinge, and
-custom differentiable margin losses over configurable RKHS or
-neural-network score classes.
+\code{odrl()} cross-fits or accepts the propensity and marginal-outcome
+nuisances, forms double-residual scores, and fits one treatment rule.
+Available policy classes are affine rules, shallow trees, kernel or
+finite-series scores, and neural networks.
 }
 \examples{
-data <- odrl_simulate(250, boundary = "tree", seed = 4)
+data <- odrl_simulate(100, boundary = "linear", seed = 4)
 nuisance <- odrl_nuisance_user(
   m = data$m, pi = data$pi, source = "known simulation truth",
   out_of_fold = TRUE
 )
-if (requireNamespace("policytree", quietly = TRUE)) {
-  fit <- odrl(data$x, data$a, data$y, learner = "tree",
-              nuisance = nuisance)
-  predict(fit, data$x[1:5, ])
-}
+fit <- odrl(
+  data$x, data$a, data$y, learner = "svm", nuisance = nuisance,
+  control = odrl_control(
+    svm_penalty = 0.1, svm_rbf_multiplier = 1, svm_folds = 2
+  )
+)
+predict(fit, data$x[1:5, ])
 }

@@ -1,3 +1,11 @@
+# odrlITR 0.1.1
+
+* Updated the bounded hinge SVM to fit the penalized hinge problem before
+  hard-tanh clipping, matching Example 3 for Gaussian, linear, and other
+  supported kernels.
+* Simplified the README, vignette, and function documentation and added a
+  runnable installation example for the public GitHub package.
+
 # odrlITR 0.1.0
 
 * Initial package release.

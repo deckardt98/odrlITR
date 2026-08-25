@@ -816,6 +816,7 @@ odrl_series_kernel <- function(
     message = fit$message,
     attempts = attempts,
     objective = fit$value,
+    rkhs_norm = sqrt(sum(fit$par^2)),
     globally_bounded = FALSE,
     bounded_output = FALSE,
     hinge_mode = if (isTRUE(loss_spec$builtin) &&
