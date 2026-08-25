@@ -69,7 +69,8 @@ character treatment, use `positive` to identify the `+1` level.
 
 Example 3 of the paper uses two steps:
 
-1. fit the residual-weighted hinge SVM in the ordinary penalized RKHS;
+1. fit a penalized RKHS score by minimizing the empirical double-residual
+   hinge loss;
 2. clip the fitted score with
    \(T_1(u)=\max\{-1,\min(1,u)\}\).
 
