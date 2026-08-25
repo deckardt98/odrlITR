@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit.R
 \name{odrl}
 \alias{odrl}
-\title{Fit an orthogonal double-residual treatment rule}
+\title{Fit an orthogonal double residual treatment rule}
 \usage{
 odrl(
   x,
@@ -85,7 +85,7 @@ components:
 tuning values and learner-specific diagnostics.}
 \item{\code{nuisance}}{The aligned nuisance predictions and first-stage
 diagnostics used to construct the score.}
-\item{\code{score}}{Raw and normalized double-residual scores, their scale,
+\item{\code{score}}{Raw and normalized double residual scores, their scale,
 and degeneracy indicators.}
 \item{\code{training}}{Fitted treatment actions and the empirical ODRL
 criterion evaluated with the unscaled score.}
@@ -100,7 +100,7 @@ than relying on learner-specific internals.
 }
 \description{
 \code{odrl()} cross-fits or accepts the propensity and marginal-outcome
-nuisances, forms double-residual scores, and fits one treatment rule.
+nuisances, forms double residual scores, and fits one treatment rule.
 Available policy classes are affine rules, shallow trees, kernel or
 finite-series scores, and neural networks.
 }

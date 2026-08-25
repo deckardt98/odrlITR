@@ -23,7 +23,7 @@
   )
 }
 
-#' Construct the orthogonal double-residual score
+#' Construct the orthogonal double residual score
 #'
 #' @param a Binary treatment.
 #' @param y Numeric outcome.

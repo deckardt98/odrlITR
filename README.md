@@ -98,15 +98,15 @@ fit <- odrl(dat$x, dat$a, dat$y, learner = "svm", nuisance = nuisance)
 | `"svm"` | hinge, exponential, logistic, squared hinge, or custom | linear, Gaussian, polynomial, wavelet, Fourier, or custom RKHS score class | none |
 | `"relu"` | hinge, exponential, logistic, squared hinge, or custom | configurable feed-forward network or external neural backend | `nnet` for its optional logistic-only backend |
 
-The tree and linear learners directly optimize the empirical double-residual
+The tree and linear learners directly optimize the empirical double residual
 objective, which is equivalent to a cost-sensitive classification risk. SVM
 and neural learners fit surrogate losses; their tuning parameters are selected
-by cross-validation using the same double-residual objective on held-out folds.
+by cross-validation using the same double residual objective on held-out folds.
 
 ## Bounded hinge SVM
 
 For the default Gaussian kernel with hinge loss, `odrlITR` minimizes the
-penalized hinge-loss surrogate of the empirical double-residual objective,
+penalized hinge-loss surrogate of the empirical double residual objective,
 then applies hard-tanh clipping so that the fitted score lies in `[-1, 1]`:
 
 ```text

@@ -2,7 +2,7 @@
 % Please edit documentation in R/score.R
 \name{odrl_score}
 \alias{odrl_score}
-\title{Construct the orthogonal double-residual score}
+\title{Construct the orthogonal double residual score}
 \usage{
 odrl_score(a, y, nuisance, tolerance = 1e-10, positive = NULL)
 }
@@ -23,5 +23,5 @@ A numeric vector with the unthresholded score
 \code{(A - e_hat) * (Y - m_hat)}. Audit details are stored in attributes.
 }
 \description{
-Construct the orthogonal double-residual score
+Construct the orthogonal double residual score
 }

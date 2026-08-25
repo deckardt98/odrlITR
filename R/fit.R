@@ -5,7 +5,7 @@
     training_action = rep(action, n),
     optimization_criterion = 0,
     diagnostics = list(
-      reason = "All double-residual scores were numerically zero.",
+      reason = "All double residual scores were numerically zero.",
       tie_rule = "+1"
     )
   ), class = "odrl_policy_constant")
@@ -72,10 +72,10 @@
   )
 }
 
-#' Fit an orthogonal double-residual treatment rule
+#' Fit an orthogonal double residual treatment rule
 #'
 #' `odrl()` cross-fits or accepts the propensity and marginal-outcome
-#' nuisances, forms double-residual scores, and fits one treatment rule.
+#' nuisances, forms double residual scores, and fits one treatment rule.
 #' Available policy classes are affine rules, shallow trees, kernel or
 #' finite-series scores, and neural networks.
 #'
@@ -119,7 +119,7 @@
 #'       tuning values and learner-specific diagnostics.}
 #'     \item{`nuisance`}{The aligned nuisance predictions and first-stage
 #'       diagnostics used to construct the score.}
-#'     \item{`score`}{Raw and normalized double-residual scores, their scale,
+#'     \item{`score`}{Raw and normalized double residual scores, their scale,
 #'       and degeneracy indicators.}
 #'     \item{`training`}{Fitted treatment actions and the empirical ODRL
 #'       criterion evaluated with the unscaled score.}
