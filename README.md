@@ -170,7 +170,7 @@ series_fit <- odrl(
 Gaussian and custom kernel fits retain a dense training kernel matrix.
 Series learners use an explicit feature map and avoid that matrix.
 
-## Neural policies
+## Neural network policies
 
 `learner = "relu"` supports affine, shallow, and multilayer scores with ReLU,
 leaky ReLU, tanh, sigmoid, or linear activations. Presets provide compact
