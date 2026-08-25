@@ -4,10 +4,10 @@
 [![R-CMD-check](https://github.com/deckardt98/odrlITR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/deckardt98/odrlITR/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-`odrlITR` implements **orthogonal double residual learning** for binary
+`odrlITR` implements **orthogonal double residual learning** for estimating optimal
 individualized treatment rules.
 
-The package separates two stages:
+The package implements a two-stage algorithm:
 
 1. estimate `pi(x) = P(A = +1 | X = x)` and `m(x) = E(Y | X = x)` by
    cross-fitted Super Learner or built-in parametric models, or supply aligned
@@ -80,7 +80,7 @@ For factor or character treatment, use `positive = "treated"` to make the
 ### Built-in parametric nuisances
 
 Use `nuisance = "parametric"` (or `"glm"`) for cross-fitted main-effects
-logistic propensity regression and Gaussian linear outcome regression. The
+logistic propensity regression and linear outcome regression. The
 same configurable, treatment-stratified outer-fold mechanism is used.
 
 ```r
@@ -117,10 +117,7 @@ object.
 
 The interface follows a quick-start-plus-override design: each policy class has
 small built-in defaults and presets, while kernels, losses, fold assignments,
-tree engines, and neural engines can be supplied by the user. This is similar
-to Super Learner's accessibility philosophy, but policy candidates are tuned
-and selected rather than ensembled unless a user-provided backend implements
-an ensemble.
+tree engines, and neural engines can be supplied by the user.
 
 | `learner` | allowed `loss` | policy class | optional package |
 |---|---|---|---|
