@@ -96,7 +96,7 @@
       is.na(loss) || !identical(loss, "logistic")) {
     .odrl_abort(
       "The `nnet` backend supports only `loss = \"logistic\"`. Use the ",
-      "native neural backend for hinge, exponential, squared-hinge, or ",
+      "native neural backend for hinge, exponential, squared hinge, or ",
       "custom margin losses."
     )
   }

@@ -3,9 +3,9 @@
 #' `type = "action"` returns treatment recommendations in the coding used to
 #' fit the model. `type = "score"` returns the real-valued decision score for
 #' affine and surrogate learners. Trees and constant policies have no unique
-#' real-valued score, so their signed action is returned. Bounded-hinge SVM
-#' scores are hard-tanh clipped to `[-1,1]`. A zero score maps to the positive
-#' treatment.
+#' real-valued score, so their signed action is returned. For hinge SVMs with
+#' bounded scores, the returned scores are clipped to `[-1,1]` with hard tanh.
+#' A zero score maps to the positive treatment.
 #'
 #' @param object An [odrl()] fit.
 #' @param newdata New covariates in the same representation used for fitting.
@@ -48,9 +48,9 @@ fitted.odrl_fit <- function(object, ...) {
   .odrl_decode_action(object$policy$training_action, object$treatment_map)
 }
 
-#' Extract affine-rule coefficients
+#' Extract affine rule coefficients
 #'
-#' By default, coefficients are returned on the original encoded-covariate
+#' By default, coefficients are returned on the original encoded covariate
 #' scale. Use `standardized = TRUE` to obtain the coefficients used internally
 #' after standardization.
 #'

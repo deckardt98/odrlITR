@@ -2,7 +2,7 @@
 % Please edit documentation in R/series-kernel.R
 \name{odrl_series_kernel}
 \alias{odrl_series_kernel}
-\title{Specify a finite-series score class}
+\title{Specify a finite series score class}
 \usage{
 odrl_series_kernel(
   basis = c("legendre", "fourier", "bspline", "haar", "local_polynomial"),
@@ -29,25 +29,25 @@ odrl_series_kernel(
 \arguments{
 \item{basis}{Univariate basis family.}
 
-\item{legendre_degree}{Positive maximum-degree grid for Legendre series.}
+\item{legendre_degree}{Positive maximum degree grid for Legendre series.}
 
-\item{fourier_harmonics}{Positive maximum-harmonic grid for Fourier series.}
+\item{fourier_harmonics}{Positive maximum harmonic grid for Fourier series.}
 
-\item{spline_df}{Positive degrees-of-freedom grid for B-spline series.}
+\item{spline_df}{Positive grid of degrees of freedom for B-spline series.}
 
 \item{spline_degree}{Nonnegative B-spline polynomial degree.}
 
-\item{wavelet_level}{Positive maximum-resolution grid for the Haar basis.}
+\item{wavelet_level}{Positive maximum resolution grid for the Haar basis.}
 
-\item{local_partitions}{Positive partition-count grid for local-polynomial
+\item{local_partitions}{Positive partition count grid for local polynomial
 series.}
 
-\item{local_degree}{Nonnegative local-polynomial degree grid.}
+\item{local_degree}{Nonnegative local polynomial degree grid.}
 
 \item{combine}{Multivariate construction. \code{"additive"} concatenates
 univariate terms, \code{"anova"} includes products involving at most
-\code{interaction_order} variables, \code{"total_degree"} constructs a total-degree
-multivariate Legendre basis, and \code{"tensor"} constructs the full tensor
+\code{interaction_order} variables, \code{"total_degree"} constructs a multivariate
+Legendre basis of total degree, and \code{"tensor"} constructs the full tensor
 product.}
 
 \item{interaction_order}{Maximum number of variables in an ANOVA product.}
@@ -57,19 +57,20 @@ product.}
 \item{include_linear}{Whether to append a raw linear term for each selected
 coordinate when it is not already present in the Legendre basis.}
 
-\item{domain}{Coordinate-domain treatment. \code{"empirical"} learns bounds from
-each training fold; \code{"unit"} uses \verb{[0,1]}.}
+\item{domain}{Treatment of the coordinate domain. \code{"empirical"} learns
+bounds from each training fold; \code{"unit"} uses \verb{[0,1]}.}
 
-\item{bounds}{Optional fixed bounds. Supply a length-two numeric vector, a
-list with \code{lower} and \code{upper}, or a two-column matrix.}
+\item{bounds}{Optional fixed bounds. Supply a numeric vector of length two,
+a list with \code{lower} and \code{upper}, or a matrix with two columns.}
 
-\item{boundary_quantiles}{Training-fold quantiles used for empirical bounds.}
+\item{boundary_quantiles}{Quantiles from each training fold used for
+empirical bounds.}
 
 \item{extrapolation}{Whether prediction values outside fitted bounds are
 clamped or rejected.}
 
 \item{normalize}{Whether to divide centered series columns by their
-training-fold root-mean-square values.}
+root-mean-square values from each training fold.}
 
 \item{max_features}{Maximum feature count before centering and rank removal.}
 
@@ -80,20 +81,20 @@ An object of class \code{odrl_series_kernel}.
 }
 \description{
 Construct an explicit finite-dimensional feature map (equivalently, a
-finite-rank positive-semidefinite kernel) and fit the surrogate in the
+positive semidefinite kernel of finite rank) and fit the surrogate in the
 primal, avoiding a dense training Gram matrix. Character shortcuts such as
 \code{"legendre"}, \code{"fourier"}, \code{"bspline"}, \code{"haar"}, and
 \code{"local_polynomial"} use the same defaults.
 }
 \details{
 Multivariate series are additive by default and therefore do not contain
-interactions. Low-order ANOVA, total-degree Legendre, and full tensor
-constructions are opt-in; the full tensor can grow exponentially. Bounds,
-knots, centering, and scaling are estimated on each policy-training fold
-and then reused for validation and prediction. Fourier terms impose
-periodic endpoint behavior. The built-in wavelet is Haar, not a
-Cohen--Daubechies--Vial boundary-corrected wavelet. The local-polynomial
-option is a partition-series basis, not a local-polynomial regression
+interactions. Low-order ANOVA, total-degree Legendre, and full tensor-product
+constructions are optional; the full tensor can grow exponentially. Bounds,
+knots, centering, and scaling are estimated within each training fold used
+for policy fitting, then reused for validation and prediction. Fourier terms
+impose periodic endpoint behavior. The included wavelet is Haar, not a
+Cohen--Daubechies--Vial boundary-corrected wavelet. The local polynomial
+option is a partition series basis, not a local polynomial regression
 smoother.
 }
 \examples{

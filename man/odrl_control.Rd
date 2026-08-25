@@ -55,11 +55,11 @@ constant rule, one a stump, and two allows a root split followed by child
 splits. The fitted tree may be shallower than this maximum, and search
 cost can rise quickly with depth.}
 
-\item{tree_split_step}{Candidate split-step passed to
+\item{tree_split_step}{Candidate split step passed to
 \code{\link[policytree:policy_tree]{policytree::policy_tree()}}. Values above one reduce computation by
 thinning candidate split points and therefore change the searched class.}
 
-\item{tree_min_node_size}{Minimum terminal-node size.}
+\item{tree_min_node_size}{Minimum terminal node size.}
 
 \item{linear_coefficient_bound}{Absolute MILP coefficient bound.}
 
@@ -73,39 +73,39 @@ negative affine score. It cannot exceed \code{linear_coefficient_bound}.}
 \item{linear_require_gap}{If \code{TRUE}, reject a feasible incumbent unless the
 solver proves the requested gap.}
 
-\item{svm_kernel}{Kernel or finite-series specification. Built-in kernels
+\item{svm_kernel}{Kernel or finite series specification. Included kernels
 are \code{"rbf"}/\code{"gaussian"}, \code{"linear"}, and
-\code{"polynomial"}/\code{"poly"}. Built-in finite-series shortcuts are
+\code{"polynomial"}/\code{"poly"}. Included finite series shortcuts are
 \code{"legendre"}, \code{"fourier"}, \code{"bspline"}, \code{"haar"}, and
 \code{"local_polynomial"}; use \code{\link[=odrl_series_kernel]{odrl_series_kernel()}} for detailed controls.
 A custom kernel may be a function \verb{function(x, y)} or a list with \code{name},
 \code{fun}, and optional \code{args}; it must be symmetric and positive semidefinite.}
 
-\item{svm_penalty}{Positive regularization grid for kernel-surrogate fits,
-including clipped bounded-hinge SVMs.}
+\item{svm_penalty}{Positive regularization grid for kernel surrogate fits,
+including hinge SVMs with clipped, bounded scores.}
 
 \item{svm_rbf_multiplier}{Positive multipliers of the median squared
 pairwise distance.}
 
-\item{svm_folds}{Number of ODRL-criterion cross-validation folds.}
+\item{svm_folds}{Number of cross-validation folds for the ODRL criterion.}
 
-\item{svm_maxit}{Maximum optimizer iterations for each kernel-surrogate fit.}
+\item{svm_maxit}{Maximum optimizer iterations for each kernel surrogate fit.}
 
-\item{relu_hidden_units}{One-hidden-layer width grid. Zero adds an affine
+\item{relu_hidden_units}{Width grid for one hidden layer. Zero adds an affine
 candidate. Ignored when \code{relu_architectures} is supplied.}
 
-\item{relu_decay}{Nonnegative weight-decay grid.}
+\item{relu_decay}{Nonnegative weight decay grid.}
 
-\item{relu_folds}{Number of ODRL-criterion cross-validation folds.}
+\item{relu_folds}{Number of cross-validation folds for the ODRL criterion.}
 
 \item{relu_restarts}{Random starts per cross-validation fit.}
 
 \item{relu_refit_restarts}{Random starts for the final ReLU refit.}
 
-\item{relu_maxit}{Maximum optimizer iterations per neural-network start.}
+\item{relu_maxit}{Maximum optimizer iterations per neural network start.}
 
-\item{relu_selection}{Select the best criterion candidate or use a one-standard-
-error rule favoring smaller networks and stronger decay.}
+\item{relu_selection}{Select the best candidate or use the
+one-standard-error rule, favoring smaller networks and stronger decay.}
 
 \item{score_tolerance}{Scores below this absolute value are treated as zero.}
 
@@ -135,9 +135,9 @@ represented by dedicated arguments cannot be overridden here.}
 
 \item{svm_polynomial_degree}{Positive integer degree grid.}
 
-\item{svm_polynomial_scale}{Positive polynomial-kernel scale.}
+\item{svm_polynomial_scale}{Positive polynomial kernel scale.}
 
-\item{svm_polynomial_offset}{Nonnegative polynomial-kernel offset.}
+\item{svm_polynomial_offset}{Nonnegative polynomial kernel offset.}
 
 \item{svm_hinge_mode}{\code{"auto"} clips Gaussian/RBF hinge scores to
 \verb{[-1,1]}; \code{"bounded"} clips hinge scores for any supported kernel;
@@ -147,24 +147,24 @@ represented by dedicated arguments cannot be overridden here.}
 
 \item{svm_kernel_args}{Named arguments passed to a custom kernel function.}
 
-\item{relu_architectures}{Optional list of hidden-layer width vectors. Use
+\item{relu_architectures}{Optional list of hidden layer width vectors. Use
 \code{integer()} for an affine score, \code{8L} for one hidden layer, and
 \code{c(16L, 8L)} for two hidden layers.}
 
 \item{relu_activation}{Activation grid: \code{"relu"}, \code{"leaky_relu"}, \code{"tanh"},
 \code{"sigmoid"}, or \code{"linear"}.}
 
-\item{relu_leaky_slope}{Negative-side slope for leaky ReLU.}
+\item{relu_leaky_slope}{Slope for negative inputs to leaky ReLU.}
 
 \item{relu_backend}{\code{"native"}, \code{"nnet"}, or a list with \code{name}, \code{fit},
 and \code{predict} callbacks. The \code{"nnet"} backend supports logistic loss with
 an affine score or one sigmoid hidden layer.}
 
-\item{relu_preset}{Optional quick-start neural candidate grid. Use
+\item{relu_preset}{Optional small neural candidate grid. Use
 \code{"affine"}, \code{"fast"}, \code{"standard"}, \code{"flexible"}, or \code{"nnet"}.
 Explicit neural controls override the preset.}
 
-\item{relu_backend_options}{Named backend-specific options. For
+\item{relu_backend_options}{Named options for the backend. For
 \code{relu_backend = "nnet"}, supported entries are \code{skip}, \code{rang},
 \code{MaxNWts}, \code{abstol}, \code{reltol}, \code{trace}, and \code{probability_epsilon}.}
 }

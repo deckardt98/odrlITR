@@ -12,8 +12,8 @@ Description: Learns individualized treatment rules with orthogonal double
     residual learning. Nuisance functions may be estimated by cross-fitted
     Super Learner or parametric models, or supplied by the user. Treatment
     rules are fitted by direct linear or tree optimization and by kernel,
-    finite-series, or neural surrogate learners. The bounded hinge SVM fits a
-    penalized hinge score and applies hard-tanh clipping.
+    finite series, or neural surrogate learners. The hinge SVM with bounded
+    scores fits a penalized hinge score and applies hard tanh clipping.
 License: MIT + file LICENSE
 URL: https://github.com/deckardt98/odrlITR
 BugReports: https://github.com/deckardt98/odrlITR/issues

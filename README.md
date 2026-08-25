@@ -8,7 +8,7 @@
 residual learning. It:
 
 1. estimates the propensity score and marginal outcome regression with
-   cross-fitting, or accepts user-supplied nuisance predictions;
+   cross-fitting, or accepts nuisance predictions supplied by the user;
 2. fits a treatment rule from the score
    `(A - e_hat(X)) * (Y - m_hat(X))`.
 
@@ -96,18 +96,19 @@ fit <- odrl(dat$x, dat$a, dat$y, learner = "svm", nuisance = nuisance)
 | `"tree"` | `"exact"` | shallow decision tree using `policytree` or a custom backend | `policytree` |
 | `"linear"` | `"exact"` | linear decision function via mixed-integer programming | `highs` |
 | `"svm"` | hinge, exponential, logistic, squared hinge, or custom | linear, Gaussian, polynomial, wavelet, Fourier, or custom RKHS score class | none |
-| `"relu"` | hinge, exponential, logistic, squared hinge, or custom | configurable feed-forward network or external neural backend | `nnet` for its optional logistic-only backend |
+| `"relu"` | hinge, exponential, logistic, squared hinge, or custom | configurable feedforward neural network or external backend | optional `nnet` backend, which supports only logistic loss |
 
 The tree and linear learners directly optimize the empirical double residual
 objective, which is equivalent to a cost-sensitive classification risk. SVM
 and neural learners fit surrogate losses; their tuning parameters are selected
-by cross-validation using the same double residual objective on held-out folds.
+by cross-validation using the same double residual objective on validation
+folds.
 
-## Bounded hinge SVM
+## Hinge SVM with bounded scores
 
 For the default Gaussian kernel with hinge loss, `odrlITR` minimizes the
-penalized hinge-loss surrogate of the empirical double residual objective,
-then applies hard-tanh clipping so that the fitted score lies in `[-1, 1]`:
+penalized hinge surrogate of the empirical double residual objective, then
+applies hard tanh clipping so that the fitted score lies in `[-1, 1]`:
 
 ```text
 T1(f) = max(-1, min(1, f))
@@ -116,10 +117,11 @@ T1(f) = max(-1, min(1, f))
 This is the construction in Example 3 of the paper. Clipping preserves the
 treatment rule and cannot increase hinge loss. The clipped score is bounded
 but need not remain an RKHS function. The paper uses this bounded score for
-its universal Neyman-orthogonality result.
+its universal Neyman orthogonality result.
 
-Set `svm_hinge_mode = "bounded"` to apply the same fit-then-clip construction
-to another supported kernel, including the linear kernel. Set
+Set `svm_hinge_mode = "bounded"` to use the same construction with another
+supported kernel, fitting first and clipping afterward. This includes the
+linear kernel. Set
 `svm_hinge_mode = "regularized"` to return the ordinary, unclipped hinge
 score.
 
@@ -137,17 +139,17 @@ linear_fit <- odrl(
 )
 ```
 
-The fitted score includes a penalized constant term, equivalently using the
-augmented kernel `K + 1`. The selected penalty, convergence result, norm, and
-primal-dual gap are available in `fit$policy$selected` and
-`fit$policy$diagnostics`.
+Penalizing the constant term is equivalent to using the augmented kernel
+`K + 1`. `fit$policy$selected` contains the selected penalty;
+`fit$policy$diagnostics` records convergence, the RKHS norm, and the duality
+gap.
 
 ## Other kernels and finite series
 
 Set `svm_kernel` to `"linear"`, `"rbf"`, or `"polynomial"`, or supply a
-custom positive-semidefinite kernel. Built-in finite-series score classes are
-available for Legendre, Fourier, B-spline, Haar-wavelet, and local-polynomial
-bases:
+custom kernel that is positive semidefinite. The package includes finite
+series score classes with Legendre, Fourier, B-spline, Haar wavelet, and local
+polynomial bases:
 
 ```r
 series <- odrl_series_kernel(
@@ -165,13 +167,13 @@ series_fit <- odrl(
 )
 ```
 
-Gaussian and custom-kernel fits retain a dense training kernel matrix.
-Finite-series learners use an explicit feature map and avoid that matrix.
+Gaussian and custom kernel fits retain a dense training kernel matrix.
+Finite series learners use an explicit feature map and avoid that matrix.
 
 ## Neural policies
 
 `learner = "relu"` supports affine, shallow, and multilayer scores with ReLU,
-leaky-ReLU, tanh, sigmoid, or linear activations. Presets provide compact
+leaky ReLU, tanh, sigmoid, or linear activations. Presets provide compact
 candidate grids:
 
 ```r
@@ -190,7 +192,7 @@ and `"nnet"`. Explicit architecture and optimizer settings override a preset.
 
 Use `predict(fit)` for treatment recommendations and
 `predict(fit, type = "score")` for decision scores. `summary(fit)` reports the
-nuisance and policy fit; learner-specific tuning and optimization details are
+nuisance and policy fit; tuning and optimization details for each learner are
 stored in `fit$policy$diagnostics`.
 
 See `vignette("getting-started", package = "odrlITR")` and the

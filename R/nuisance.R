@@ -1,19 +1,19 @@
-#' Construct user-supplied ODRL nuisance predictions
+#' Construct ODRL nuisance predictions
 #'
-#' User-supplied predictions should be aligned with the rows of `x`. Unless a
-#' nuisance is known by design, they should be out-of-fold predictions. Supply
-#' either `pi` or `e`, where `e = 2 * pi - 1` under the package's internal
-#' \eqn{\{-1,+1\}} treatment coding.
+#' Predictions supplied by the user should be aligned with the rows of `x`.
+#' Unless a nuisance is known by design, they should be out-of-fold predictions.
+#' Supply either `pi` or `e`, where `e = 2 * pi - 1` under the package's
+#' internal \eqn{\{-1,+1\}} treatment coding.
 #'
 #' @param m Numeric predictions of \eqn{E(Y\mid X)}.
 #' @param pi Numeric predictions of \eqn{P(A=+1\mid X)}.
 #' @param e Numeric predictions of \eqn{E(A\mid X)}.
-#' @param fold_id Optional outer-fold identifier for auditing.
+#' @param fold_id Optional outer fold identifier for auditing.
 #' @param source Short description of how the predictions were obtained.
 #' @param out_of_fold Whether predictions are out of fold or known by design.
 #'   The conservative default is `FALSE`; [odrl()] warns because ordinary
 #'   in-sample predictions do not implement the paper's cross-fitting step.
-#' @param propensity_bounds Optional two-element numerical safeguard. Use
+#' @param propensity_bounds Optional numeric vector of length two. Use
 #'   `NULL` to retain supplied probabilities exactly.
 #'
 #' @return An object of class `odrl_nuisance`.
@@ -238,16 +238,16 @@ odrl_nuisance_user <- function(
 #' @param folds Number of outer cross-fitting folds. Ignored when `fold_id` is
 #'   supplied. Automatically generated folds are treatment-stratified, and
 #'   their total sizes differ by at most one row.
-#' @param fold_id Optional row-aligned user-specified outer-fold identifiers.
+#' @param fold_id Optional outer fold identifiers supplied for each row.
 #'   Labels may be numeric, character, or factor and are normalized internally.
 #'   Every resulting training set must contain at least two observations and
 #'   must retain at least two observations from each treatment arm when the
 #'   propensity is estimated.
 #' @param sl.library Character vector or list understood by
 #'   [SuperLearner::SuperLearner()].
-#' @param sl.library.pi Optional propensity-specific library. Defaults to
+#' @param sl.library.pi Optional library for the propensity. Defaults to
 #'   `sl.library`.
-#' @param sl.library.m Optional marginal-outcome-specific library. Defaults to
+#' @param sl.library.m Optional library for the marginal outcome. Defaults to
 #'   `sl.library`.
 #' @param inner_folds Super Learner cross-validation folds within each outer
 #'   training sample.
@@ -256,9 +256,9 @@ odrl_nuisance_user <- function(
 #'   treatment `+1`. By default, the second factor level is positive.
 #' @param propensity_bounds Optional numerical safeguard. `NULL` retains the
 #'   Super Learner predictions exactly.
-#' @param known_pi Optional scalar or row-aligned vector containing a known
-#'   propensity. This skips propensity fitting while retaining cross-fitting
-#'   for the marginal outcome regression.
+#' @param known_pi Optional scalar or vector with one known propensity per row.
+#'   This skips propensity fitting while retaining cross-fitting for the
+#'   marginal outcome regression.
 #' @param known_e Optional known `E(A|X)` on the `{-1,+1}` scale. Supply at
 #'   most one of `known_pi` and `known_e`.
 #' @param verbose Passed to [SuperLearner::SuperLearner()].
@@ -266,7 +266,7 @@ odrl_nuisance_user <- function(
 #'
 #' @return An `odrl_nuisance` object containing aligned out-of-fold
 #'   predictions. Its `fits` component records the libraries, coefficients,
-#'   actual (possibly capped) inner-fold counts, and captured warnings for
+#'   actual numbers of inner folds (possibly capped) and captured warnings for
 #'   every outer fold; `warnings` is the unique aggregate warning ledger.
 #' @export
 odrl_nuisance_sl <- function(
@@ -429,16 +429,16 @@ odrl_nuisance_sl <- function(
 
 #' Cross-fitted parametric nuisances for ODRL
 #'
-#' Fits a main-effects logistic regression for the propensity and a
-#' main-effects linear regression for the pooled marginal outcome. Models are
-#' trained separately within each outer training set and predict only held-out
-#' observations. To use a richer prespecified basis, pass that basis as `x`.
+#' Fits logistic and linear regressions with main effects for the propensity
+#' and pooled marginal outcome, respectively. Models are trained separately
+#' within each outer training set and predict only held-out observations. To use
+#' a richer prespecified basis, pass that basis as `x`.
 #'
 #' @inheritParams odrl_nuisance_sl
 #'
 #' @return An `odrl_nuisance` object containing aligned out-of-fold
-#'   predictions and fold-specific coefficient, rank, convergence, and warning
-#'   diagnostics.
+#'   predictions and coefficient, rank, convergence, and warning diagnostics
+#'   for each fold.
 #' @export
 odrl_nuisance_parametric <- function(
     x, a, y, folds = 5L, fold_id = NULL, seed = 1L, positive = NULL,

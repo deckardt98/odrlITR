@@ -29,7 +29,7 @@ two-level factor.}
 supplied. Automatically generated folds are treatment-stratified, and
 their total sizes differ by at most one row.}
 
-\item{fold_id}{Optional row-aligned user-specified outer-fold identifiers.
+\item{fold_id}{Optional outer fold identifiers supplied for each row.
 Labels may be numeric, character, or factor and are normalized internally.
 Every resulting training set must contain at least two observations and
 must retain at least two observations from each treatment arm when the
@@ -43,21 +43,21 @@ treatment \code{+1}. By default, the second factor level is positive.}
 \item{propensity_bounds}{Optional numerical safeguard. \code{NULL} retains the
 Super Learner predictions exactly.}
 
-\item{known_pi}{Optional scalar or row-aligned vector containing a known
-propensity. This skips propensity fitting while retaining cross-fitting
-for the marginal outcome regression.}
+\item{known_pi}{Optional scalar or vector with one known propensity per row.
+This skips propensity fitting while retaining cross-fitting for the
+marginal outcome regression.}
 
 \item{known_e}{Optional known \code{E(A|X)} on the \verb{\{-1,+1\}} scale. Supply at
 most one of \code{known_pi} and \code{known_e}.}
 }
 \value{
 An \code{odrl_nuisance} object containing aligned out-of-fold
-predictions and fold-specific coefficient, rank, convergence, and warning
-diagnostics.
+predictions and coefficient, rank, convergence, and warning diagnostics
+for each fold.
 }
 \description{
-Fits a main-effects logistic regression for the propensity and a
-main-effects linear regression for the pooled marginal outcome. Models are
-trained separately within each outer training set and predict only held-out
-observations. To use a richer prespecified basis, pass that basis as \code{x}.
+Fits logistic and linear regressions with main effects for the propensity
+and pooled marginal outcome, respectively. Models are trained separately
+within each outer training set and predict only held-out observations. To use
+a richer prespecified basis, pass that basis as \code{x}.
 }

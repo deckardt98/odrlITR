@@ -19,7 +19,7 @@ odrl_formula(formula, treatment, data, ...)
 An \code{odrl_fit} object.
 }
 \description{
-This convenience interface supports ordinary variable-only formulas. The
+This interface supports standard two-sided R model formulas. The
 treatment column is removed before \code{.} is expanded, preventing accidental
 treatment leakage into the policy covariates.
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/methods.R
 \name{coef.odrl_fit}
 \alias{coef.odrl_fit}
-\title{Extract affine-rule coefficients}
+\title{Extract affine rule coefficients}
 \usage{
 \method{coef}{odrl_fit}(object, standardized = FALSE, ...)
 }
@@ -17,7 +17,7 @@
 A named numeric vector for affine fits, otherwise \code{NULL}.
 }
 \description{
-By default, coefficients are returned on the original encoded-covariate
+By default, coefficients are returned on the original encoded covariate
 scale. Use \code{standardized = TRUE} to obtain the coefficients used internally
 after standardization.
 }

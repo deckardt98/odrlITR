@@ -44,7 +44,7 @@
 #' Fit an exact affine ODRL rule by mixed-integer optimization
 #'
 #' The binary decision variables encode the sign of an affine score. A finite
-#' coefficient box supplies valid row-specific big-M constants. A feasible
+#' coefficient box supplies valid big-M constants, one for each row. A feasible
 #' incumbent is returned when the time limit is reached; its solver status and
 #' MIP gap remain available in `diagnostics` and are never relabelled optimal.
 #'
@@ -100,7 +100,7 @@
   if (!is.finite(integrality_error) ||
       integrality_error > integrality_tolerance) {
     .odrl_abort(
-      "The solver incumbent failed the binary-integrality audit ",
+      "The solver incumbent failed the binary integrality audit ",
       "(maximum distance to {0,1} = ", format(integrality_error), ")."
     )
   }
@@ -118,7 +118,7 @@
   if (max_violation > audit_tolerance || action_mismatch > 0L ||
       objective_difference > audit_tolerance) {
     .odrl_abort(
-      "The solver incumbent failed the affine-rule integrity audit ",
+      "The solver incumbent failed the affine rule integrity audit ",
       "(maximum constraint violation = ", format(max_violation),
       ", action mismatches = ", action_mismatch,
       ", objective difference = ", format(objective_difference), ")."

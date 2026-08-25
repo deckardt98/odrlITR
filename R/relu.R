@@ -5,7 +5,7 @@
   }
   if (anyNA(hidden) || any(hidden <= 0L)) {
     .odrl_abort(
-      "A neural-network architecture must be a vector of positive layer ",
+      "A neural network architecture must be a vector of positive layer ",
       "widths; use `integer()` or `0L` for an affine score."
     )
   }
@@ -25,7 +25,7 @@
     tanh = tanh(x),
     sigmoid = stats::plogis(x),
     linear = x,
-    .odrl_abort("Unsupported neural-network activation `", activation, "`.")
+    .odrl_abort("Unsupported neural network activation `", activation, "`.")
   )
 }
 
@@ -40,7 +40,7 @@
       probability * (1 - probability)
     },
     linear = rep(1, length(x)),
-    .odrl_abort("Unsupported neural-network activation `", activation, "`.")
+    .odrl_abort("Unsupported neural network activation `", activation, "`.")
   )
 }
 
@@ -163,7 +163,7 @@
     } else if (is.function(loss)) {
       .odrl_relu_custom_loss(loss, margin)
     } else {
-      .odrl_abort("Unsupported neural-network surrogate loss.")
+      .odrl_abort("Unsupported neural network surrogate loss.")
     }
     value <- mean(weight * evaluated$loss)
     derivative <- weight * evaluated$gradient * label / n
@@ -279,7 +279,7 @@
   }
   if (length(options)) {
     .odrl_abort(
-      "For a custom neural backend, close over backend-specific options in ",
+      "For a custom neural backend, close over options for the backend in ",
       "its `fit` and `predict` callbacks."
     )
   }
@@ -301,7 +301,7 @@
     identical(loss, "hinge")
   score_scale <- mean(abs(score))
   if (!is.finite(score_scale)) {
-    .odrl_abort("Neural-network scores must be finite.")
+    .odrl_abort("Neural network scores must be finite.")
   }
   if (score_scale <= 1e-14) {
     return(list(
@@ -434,7 +434,7 @@
   }
   if (!is.numeric(raw) || length(raw) != nrow(newx) ||
       any(!is.finite(raw))) {
-    .odrl_abort("The neural-network backend returned invalid predictions.")
+    .odrl_abort("The neural network backend returned invalid predictions.")
   }
   if (isTRUE(fit$bounded_output)) {
     .odrl_hardtanh(raw)
@@ -449,7 +449,7 @@
   )
   if (!length(converged)) {
     .odrl_abort(
-      "Every neural-network candidate had at least one nonconverged tuning ",
+      "Every neural network candidate had at least one nonconverged tuning ",
       "fit. Increase `relu_maxit`, add restarts, or simplify the tuning grid."
     )
   }
@@ -478,7 +478,7 @@
   lapply(architectures, .odrl_relu_architecture)
 }
 
-#' Fit a tuned neural-network ODRL rule
+#' Fit a tuned neural network ODRL rule
 #' @noRd
 .odrl_fit_relu <- function(x, score, control, loss) {
   folds <- min(control$relu_folds, nrow(x))
@@ -560,7 +560,7 @@
   )
   if (final$convergence != 0L) {
     .odrl_abort(
-      "The selected neural-network candidate did not converge on the full ",
+      "The selected neural network candidate did not converge on the full ",
       "sample. Increase `relu_maxit` or `relu_refit_restarts`."
     )
   }

@@ -4,10 +4,10 @@
 #'   constant rule, one a stump, and two allows a root split followed by child
 #'   splits. The fitted tree may be shallower than this maximum, and search
 #'   cost can rise quickly with depth.
-#' @param tree_split_step Candidate split-step passed to
+#' @param tree_split_step Candidate split step passed to
 #'   [policytree::policy_tree()]. Values above one reduce computation by
 #'   thinning candidate split points and therefore change the searched class.
-#' @param tree_min_node_size Minimum terminal-node size.
+#' @param tree_min_node_size Minimum terminal node size.
 #' @param tree_backend Tree engine. Use `"policytree"` or a list containing
 #'   `name`, `fit`, and `predict` callbacks. The fit callback receives `x`,
 #'   `score`, `rewards`, `depth`, `min_node_size`, `split_step`, and `options`;
@@ -29,49 +29,49 @@
 #' @param linear_log_to_console Whether HiGHS prints its solver log.
 #' @param linear_solver_options Named list of additional HiGHS options. Options
 #'   represented by dedicated arguments cannot be overridden here.
-#' @param svm_kernel Kernel or finite-series specification. Built-in kernels
+#' @param svm_kernel Kernel or finite series specification. Included kernels
 #'   are `"rbf"`/`"gaussian"`, `"linear"`, and
-#'   `"polynomial"`/`"poly"`. Built-in finite-series shortcuts are
+#'   `"polynomial"`/`"poly"`. Included finite series shortcuts are
 #'   `"legendre"`, `"fourier"`, `"bspline"`, `"haar"`, and
 #'   `"local_polynomial"`; use [odrl_series_kernel()] for detailed controls.
 #'   A custom kernel may be a function `function(x, y)` or a list with `name`,
 #'   `fun`, and optional `args`; it must be symmetric and positive semidefinite.
-#' @param svm_penalty Positive regularization grid for kernel-surrogate fits,
-#'   including clipped bounded-hinge SVMs.
+#' @param svm_penalty Positive regularization grid for kernel surrogate fits,
+#'   including hinge SVMs with clipped, bounded scores.
 #' @param svm_rbf_multiplier Positive multipliers of the median squared
 #'   pairwise distance.
-#' @param svm_folds Number of ODRL-criterion cross-validation folds.
-#' @param svm_maxit Maximum optimizer iterations for each kernel-surrogate fit.
+#' @param svm_folds Number of cross-validation folds for the ODRL criterion.
+#' @param svm_maxit Maximum optimizer iterations for each kernel surrogate fit.
 #' @param svm_polynomial_degree Positive integer degree grid.
-#' @param svm_polynomial_scale Positive polynomial-kernel scale.
-#' @param svm_polynomial_offset Nonnegative polynomial-kernel offset.
+#' @param svm_polynomial_scale Positive polynomial kernel scale.
+#' @param svm_polynomial_offset Nonnegative polynomial kernel offset.
 #' @param svm_hinge_mode `"auto"` clips Gaussian/RBF hinge scores to
 #'   `[-1,1]`; `"bounded"` clips hinge scores for any supported kernel;
 #'   `"regularized"` returns the ordinary unbounded hinge score.
 #' @param svm_kernel_function Function used with `svm_kernel = "custom"`.
 #' @param svm_kernel_args Named arguments passed to a custom kernel function.
-#' @param relu_hidden_units One-hidden-layer width grid. Zero adds an affine
+#' @param relu_hidden_units Width grid for one hidden layer. Zero adds an affine
 #'   candidate. Ignored when `relu_architectures` is supplied.
-#' @param relu_decay Nonnegative weight-decay grid.
-#' @param relu_folds Number of ODRL-criterion cross-validation folds.
+#' @param relu_decay Nonnegative weight decay grid.
+#' @param relu_folds Number of cross-validation folds for the ODRL criterion.
 #' @param relu_restarts Random starts per cross-validation fit.
 #' @param relu_refit_restarts Random starts for the final ReLU refit.
-#' @param relu_maxit Maximum optimizer iterations per neural-network start.
-#' @param relu_selection Select the best criterion candidate or use a one-standard-
-#'   error rule favoring smaller networks and stronger decay.
-#' @param relu_architectures Optional list of hidden-layer width vectors. Use
+#' @param relu_maxit Maximum optimizer iterations per neural network start.
+#' @param relu_selection Select the best candidate or use the
+#'   one-standard-error rule, favoring smaller networks and stronger decay.
+#' @param relu_architectures Optional list of hidden layer width vectors. Use
 #'   `integer()` for an affine score, `8L` for one hidden layer, and
 #'   `c(16L, 8L)` for two hidden layers.
 #' @param relu_activation Activation grid: `"relu"`, `"leaky_relu"`, `"tanh"`,
 #'   `"sigmoid"`, or `"linear"`.
-#' @param relu_leaky_slope Negative-side slope for leaky ReLU.
+#' @param relu_leaky_slope Slope for negative inputs to leaky ReLU.
 #' @param relu_backend `"native"`, `"nnet"`, or a list with `name`, `fit`,
 #'   and `predict` callbacks. The `"nnet"` backend supports logistic loss with
 #'   an affine score or one sigmoid hidden layer.
-#' @param relu_preset Optional quick-start neural candidate grid. Use
+#' @param relu_preset Optional small neural candidate grid. Use
 #'   `"affine"`, `"fast"`, `"standard"`, `"flexible"`, or `"nnet"`.
 #'   Explicit neural controls override the preset.
-#' @param relu_backend_options Named backend-specific options. For
+#' @param relu_backend_options Named options for the backend. For
 #'   `relu_backend = "nnet"`, supported entries are `skip`, `rang`,
 #'   `MaxNWts`, `abstol`, `reltol`, `trace`, and `probability_epsilon`.
 #' @param score_tolerance Scores below this absolute value are treated as zero.
@@ -188,7 +188,7 @@ odrl_control <- function(
     )) {
       .odrl_abort(
         "`svm_kernel` must be `\"rbf\"`, `\"linear\"`, `\"polynomial\"`, ",
-        "a built-in finite-series name, `\"custom\"`, a kernel function, ",
+        "an included finite series name, `\"custom\"`, a kernel function, ",
         "or a kernel/series specification list."
       )
     }

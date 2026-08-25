@@ -17,7 +17,8 @@ odrl_simulate(n = 500L, boundary = c("linear", "tree"), seed = 1L)
 A list containing \code{x}, \code{a}, \code{y}, and the true nuisances and rule.
 }
 \description{
-Generates a binary-treatment example with a linear propensity, linear
-marginal outcome regression, and either a linear or depth-2 treatment rule.
+Generates an example with binary treatment, a linear propensity, a linear
+marginal outcome regression, and either a linear treatment rule or a depth-2
+tree rule.
 It is intended for examples and smoke tests, not as a scientific benchmark.
 }

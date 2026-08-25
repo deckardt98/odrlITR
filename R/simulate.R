@@ -1,7 +1,8 @@
 #' Simulate a simple ODRL example
 #'
-#' Generates a binary-treatment example with a linear propensity, linear
-#' marginal outcome regression, and either a linear or depth-2 treatment rule.
+#' Generates an example with binary treatment, a linear propensity, a linear
+#' marginal outcome regression, and either a linear treatment rule or a depth-2
+#' tree rule.
 #' It is intended for examples and smoke tests, not as a scientific benchmark.
 #'
 #' @param n Sample size.

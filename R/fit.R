@@ -37,12 +37,12 @@
   }
   if (is.character(loss)) {
     if (length(loss) != 1L || is.na(loss)) {
-      .odrl_abort("`loss` must be one supported surrogate-loss name.")
+      .odrl_abort("`loss` must be one supported surrogate loss name.")
     }
     name <- .odrl_canonical_loss_name(loss)
     if (!name %in% c("hinge", "exponential", "logistic", "squared_hinge")) {
       .odrl_abort(
-        "Unknown neural-network surrogate loss: ", loss, ". Use `\"hinge\"`, ",
+        "Unknown neural network surrogate loss: ", loss, ". Use `\"hinge\"`, ",
         "`\"exponential\"`, `\"logistic\"`, `\"squared_hinge\"`, or a ",
         "custom loss."
       )
@@ -67,17 +67,17 @@
     return(list(fit = loss, label = .odrl_relu_loss_name(loss)))
   }
   .odrl_abort(
-    "A custom neural-network loss must be a function or a list with ",
+    "A custom neural network loss must be a function or a list with ",
     "`value` and `gradient` functions."
   )
 }
 
 #' Fit an orthogonal double residual treatment rule
 #'
-#' `odrl()` cross-fits or accepts the propensity and marginal-outcome
+#' `odrl()` cross-fits or accepts the propensity and marginal outcome
 #' nuisances, forms double residual scores, and fits one treatment rule.
 #' Available policy classes are affine rules, shallow trees, kernel or
-#' finite-series scores, and neural networks.
+#' finite series scores, and neural networks.
 #'
 #' @param x Covariate matrix or data frame.
 #' @param a Binary treatment. Numeric values may be `{0,1}` or `{-1,+1}`.
@@ -86,7 +86,7 @@
 #'   The `"relu"` learner also supports other activations and backends.
 #' @param loss `"exact"` for tree/linear; `"hinge"`, `"exponential"`,
 #'   `"logistic"`, or `"squared_hinge"` for SVM/neural learners; or a custom
-#'   differentiable signed-margin loss. SVM custom losses use a list with
+#'   differentiable loss of the signed margin. SVM custom losses use a list with
 #'   `value` and `gradient` functions. Neural custom losses may use that list
 #'   or a function returning `list(loss, gradient)`. If `NULL`, direct
 #'   learners use exact loss and surrogate learners use hinge loss.
@@ -96,15 +96,16 @@
 #'   plus `pi` or `e`, or a function `function(x, a, y)` returning one of those
 #'   objects.
 #' @param nuisance_folds Number of outer nuisance cross-fitting folds.
-#' @param nuisance_fold_id Optional row-aligned outer-fold identifiers.
-#'   Otherwise, treatment-stratified folds are generated.
+#' @param nuisance_fold_id Optional outer fold identifiers supplied for each
+#'   row. Otherwise, treatment-stratified folds are generated.
 #' @param sl.library Library passed to [odrl_nuisance_sl()].
-#' @param sl.library.pi Optional propensity-specific Super Learner library.
-#' @param sl.library.m Optional marginal-outcome-specific Super Learner library.
+#' @param sl.library.pi Optional Super Learner library for the propensity.
+#' @param sl.library.m Optional Super Learner library for the marginal outcome.
 #' @param sl_inner_folds Super Learner's inner cross-validation folds.
 #' @param known_pi,known_e Optional known propensity on the probability or
-#'   `E(A|X)` scale. This enables randomized-trial use while cross-fitting `m`.
-#' @param propensity_bounds Optional two-element limits for propensity
+#'   `E(A|X)` scale. This enables use in randomized trials while cross-fitting
+#'   `m`.
+#' @param propensity_bounds Optional limits of length two for propensity
 #'   predictions. `NULL` performs no clipping.
 #' @param positive For factor/character treatment, the level representing
 #'   treatment `+1`. The second factor level is used by default.
@@ -116,7 +117,7 @@
 #'   components:
 #'   \describe{
 #'     \item{`policy`}{The fitted second-stage policy, including its selected
-#'       tuning values and learner-specific diagnostics.}
+#'       tuning values and diagnostics for the learner.}
 #'     \item{`nuisance`}{The aligned nuisance predictions and first-stage
 #'       diagnostics used to construct the score.}
 #'     \item{`score`}{Raw and normalized double residual scores, their scale,
@@ -130,7 +131,7 @@
 #'   The object also records `call`, `learner`, `loss`, `control`, sample
 #'   dimensions `n` and `p`, and elapsed `runtime`. Use [predict.odrl_fit()],
 #'   [fitted.odrl_fit()], [coef.odrl_fit()], and [summary.odrl_fit()] rather
-#'   than relying on learner-specific internals.
+#'   than relying on internals for each learner.
 #' @export
 #'
 #' @examples
@@ -247,7 +248,7 @@ odrl <- function(
 
 #' Formula interface for ODRL
 #'
-#' This convenience interface supports ordinary variable-only formulas. The
+#' This interface supports standard two-sided R model formulas. The
 #' treatment column is removed before `.` is expanded, preventing accidental
 #' treatment leakage into the policy covariates.
 #'

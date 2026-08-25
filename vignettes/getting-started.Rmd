@@ -13,7 +13,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 ## Method
 
-`odrlITR` represents treatment by (A\in\{-1,+1\}) and estimates
+`odrlITR` represents treatment by \(A\in\{-1,+1\}\) and estimates
 
 \[
 e(x)=E(A\mid X=x), \qquad m(x)=E(Y\mid X=x).
@@ -34,7 +34,7 @@ remain on the original scale.
 
 ## A complete example
 
-The built-in parametric nuisance and kernel SVM paths require no optional
+The included parametric nuisance and kernel SVM paths require no optional
 packages.
 
 ```{r fit}
@@ -65,7 +65,7 @@ fit$policy$selected
 `predict(fit, type = "score")` returns the decision score. For factor or
 character treatment, use `positive` to identify the `+1` level.
 
-## Bounded hinge SVM
+## Hinge SVM with bounded scores
 
 Example 3 of the paper uses two steps:
 
@@ -76,7 +76,7 @@ Example 3 of the paper uses two steps:
 
 Clipping preserves the sign of the score and cannot increase hinge loss. The
 result is bounded by one, although it need not itself be an RKHS function. The
-paper uses this bounded score for its universal Neyman-orthogonality result.
+paper uses this bounded score for its universal Neyman orthogonality result.
 
 This is the default for hinge loss with the Gaussian/RBF kernel. Use explicit
 bounded mode for another supported kernel:
@@ -97,12 +97,12 @@ linear_fit <- odrl(
 Use `svm_hinge_mode = "regularized"` for an unclipped hinge score. The SVM
 penalizes the kernel component and a constant offset, which is equivalent to
 using the augmented kernel (K+1). The fitted object records the selected
-penalty, score norm, convergence code, and primal-dual gap.
+penalty, score norm, convergence code, and duality gap.
 
 ## Nuisance choices
 
 `nuisance = "parametric"` cross-fits a logistic propensity model and a linear
-marginal-outcome model. Include transformations or interactions as columns of
+marginal outcome model. Include transformations or interactions as columns of
 `x` when they are part of the intended models.
 
 The default, `nuisance = NULL`, uses cross-fitted Super Learner:
@@ -119,10 +119,9 @@ fit <- odrl(
 
 Use `sl.library.pi` and `sl.library.m` to set separate libraries. Supply
 `known_pi` or `known_e` in a randomized trial. `nuisance_fold_id` accepts a
-row-aligned outer-fold assignment.
+vector assigning each row to an outer fold.
 
-User-supplied nuisance predictions are accepted through
-`odrl_nuisance_user()`:
+You can provide nuisance predictions with `odrl_nuisance_user()`:
 
 ```{r user-nuisance, eval=FALSE}
 nuisance <- odrl_nuisance_user(
@@ -145,15 +144,15 @@ by the propensity. Set `propensity_bounds` when clipping is desired.
 |:--|:--|:--|
 | `"tree"` | exact shallow policy tree | `policytree` |
 | `"linear"` | exact affine rule by mixed-integer programming | `highs` |
-| `"svm"` | kernel or finite-series surrogate | none |
+| `"svm"` | kernel or finite series surrogate | none |
 | `"relu"` | native neural surrogate or external backend | `nnet` for that backend |
 
 Tree depth is a maximum: zero fits a constant rule, one a stump, and two
-allows a root split followed by child splits. Linear-solver status and gap
+allows a root split followed by child splits. The linear solver status and gap
 information are stored in `fit$policy$diagnostics`.
 
 SVM and neural learners support hinge, exponential, logistic, squared hinge,
-and custom differentiable signed-margin losses. Kernel choices include
+and custom differentiable losses of the signed margin. Kernel choices include
 `"linear"`, `"rbf"`, and `"polynomial"`; a function or named specification
 can define a custom kernel.
 
@@ -170,11 +169,12 @@ neural_fit <- odrl(
 )
 ```
 
-## Finite-series scores
+## Finite series scores
 
 `odrl_series_kernel()` defines explicit Legendre, Fourier, B-spline,
-Haar-wavelet, and local-polynomial features. The feature map is learned within
-each policy-training fold and reused for validation and prediction.
+Haar wavelet, and local polynomial features. The feature map is learned within
+each training fold used for policy fitting and reused for validation and
+prediction.
 
 ```{r series, eval=FALSE}
 series <- odrl_series_kernel(
@@ -197,8 +197,8 @@ series_fit <- odrl(
 
 The additive basis omits interactions. `combine = "anova"` adds interactions
 up to `interaction_order`; `"total_degree"` builds a total-degree Legendre
-basis; and `"tensor"` requests a full tensor product. Gaussian and custom
-kernels retain a dense training kernel matrix, while finite-series learners
+basis; and `"tensor"` requests a full tensor-product basis. Gaussian and custom
+kernels retain a dense training kernel matrix, while finite series learners
 fit their explicit features directly.
 
 ## Inspecting a fit

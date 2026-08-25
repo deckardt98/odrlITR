@@ -2,7 +2,7 @@
 % Please edit documentation in R/nuisance.R
 \name{odrl_nuisance_user}
 \alias{odrl_nuisance_user}
-\title{Construct user-supplied ODRL nuisance predictions}
+\title{Construct ODRL nuisance predictions}
 \usage{
 odrl_nuisance_user(
   m,
@@ -21,7 +21,7 @@ odrl_nuisance_user(
 
 \item{e}{Numeric predictions of \eqn{E(A\mid X)}.}
 
-\item{fold_id}{Optional outer-fold identifier for auditing.}
+\item{fold_id}{Optional outer fold identifier for auditing.}
 
 \item{source}{Short description of how the predictions were obtained.}
 
@@ -29,15 +29,15 @@ odrl_nuisance_user(
 The conservative default is \code{FALSE}; \code{\link[=odrl]{odrl()}} warns because ordinary
 in-sample predictions do not implement the paper's cross-fitting step.}
 
-\item{propensity_bounds}{Optional two-element numerical safeguard. Use
+\item{propensity_bounds}{Optional numeric vector of length two. Use
 \code{NULL} to retain supplied probabilities exactly.}
 }
 \value{
 An object of class \code{odrl_nuisance}.
 }
 \description{
-User-supplied predictions should be aligned with the rows of \code{x}. Unless a
-nuisance is known by design, they should be out-of-fold predictions. Supply
-either \code{pi} or \code{e}, where \code{e = 2 * pi - 1} under the package's internal
-\eqn{\{-1,+1\}} treatment coding.
+Predictions supplied by the user should be aligned with the rows of \code{x}.
+Unless a nuisance is known by design, they should be out-of-fold predictions.
+Supply either \code{pi} or \code{e}, where \code{e = 2 * pi - 1} under the package's
+internal \eqn{\{-1,+1\}} treatment coding.
 }

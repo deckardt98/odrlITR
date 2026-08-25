@@ -4,11 +4,11 @@
 #' @param score Signed ODRL score.
 #' @param control An [odrl_control()] object.
 #'
-#' @return An internal fitted-policy object.
+#' @return An internal fitted policy object.
 #' @noRd
 .odrl_fit_tree <- function(x, score, control) {
   # policytree resolves equal leaf rewards in favor of the first action. Put
-  # +1 first to implement the package-wide sign(0) = +1 convention.
+  # +1 first to implement the package sign(0) = +1 convention.
   gamma <- cbind(`+1` = score / 2, `-1` = -score / 2)
   backend <- .odrl_tree_backend_spec(control$tree_backend %||% "policytree")
   options <- control$tree_options %||% list()
@@ -39,7 +39,7 @@
     if (length(action_id) != nrow(x) || anyNA(action_id) ||
         any(!action_id %in% 1:2)) {
       .odrl_abort(
-        "The policy-tree engine returned invalid action identifiers; ",
+        "The `policytree` engine returned invalid action identifiers; ",
         "expected one value in {1,2} for every training row."
       )
     }
@@ -123,7 +123,7 @@
   if (length(action_id) != nrow(newx) || anyNA(action_id) ||
       any(!action_id %in% 1:2)) {
     .odrl_abort(
-      "The policy-tree engine returned invalid action identifiers; ",
+      "The `policytree` engine returned invalid action identifiers; ",
       "expected one value in {1,2} for every prediction row."
     )
   }

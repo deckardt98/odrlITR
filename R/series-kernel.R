@@ -1,48 +1,49 @@
-#' Specify a finite-series score class
+#' Specify a finite series score class
 #'
 #' Construct an explicit finite-dimensional feature map (equivalently, a
-#' finite-rank positive-semidefinite kernel) and fit the surrogate in the
+#' positive semidefinite kernel of finite rank) and fit the surrogate in the
 #' primal, avoiding a dense training Gram matrix. Character shortcuts such as
 #' `"legendre"`, `"fourier"`, `"bspline"`, `"haar"`, and
 #' `"local_polynomial"` use the same defaults.
 #'
 #' Multivariate series are additive by default and therefore do not contain
-#' interactions. Low-order ANOVA, total-degree Legendre, and full tensor
-#' constructions are opt-in; the full tensor can grow exponentially. Bounds,
-#' knots, centering, and scaling are estimated on each policy-training fold
-#' and then reused for validation and prediction. Fourier terms impose
-#' periodic endpoint behavior. The built-in wavelet is Haar, not a
-#' Cohen--Daubechies--Vial boundary-corrected wavelet. The local-polynomial
-#' option is a partition-series basis, not a local-polynomial regression
+#' interactions. Low-order ANOVA, total-degree Legendre, and full tensor-product
+#' constructions are optional; the full tensor can grow exponentially. Bounds,
+#' knots, centering, and scaling are estimated within each training fold used
+#' for policy fitting, then reused for validation and prediction. Fourier terms
+#' impose periodic endpoint behavior. The included wavelet is Haar, not a
+#' Cohen--Daubechies--Vial boundary-corrected wavelet. The local polynomial
+#' option is a partition series basis, not a local polynomial regression
 #' smoother.
 #'
 #' @param basis Univariate basis family.
-#' @param legendre_degree Positive maximum-degree grid for Legendre series.
-#' @param fourier_harmonics Positive maximum-harmonic grid for Fourier series.
-#' @param spline_df Positive degrees-of-freedom grid for B-spline series.
+#' @param legendre_degree Positive maximum degree grid for Legendre series.
+#' @param fourier_harmonics Positive maximum harmonic grid for Fourier series.
+#' @param spline_df Positive grid of degrees of freedom for B-spline series.
 #' @param spline_degree Nonnegative B-spline polynomial degree.
-#' @param wavelet_level Positive maximum-resolution grid for the Haar basis.
-#' @param local_partitions Positive partition-count grid for local-polynomial
+#' @param wavelet_level Positive maximum resolution grid for the Haar basis.
+#' @param local_partitions Positive partition count grid for local polynomial
 #'   series.
-#' @param local_degree Nonnegative local-polynomial degree grid.
+#' @param local_degree Nonnegative local polynomial degree grid.
 #' @param combine Multivariate construction. `"additive"` concatenates
 #'   univariate terms, `"anova"` includes products involving at most
-#'   `interaction_order` variables, `"total_degree"` constructs a total-degree
-#'   multivariate Legendre basis, and `"tensor"` constructs the full tensor
+#'   `interaction_order` variables, `"total_degree"` constructs a multivariate
+#'   Legendre basis of total degree, and `"tensor"` constructs the full tensor
 #'   product.
 #' @param interaction_order Maximum number of variables in an ANOVA product.
 #' @param variables Optional positive column indices or column names to use.
 #' @param include_linear Whether to append a raw linear term for each selected
 #'   coordinate when it is not already present in the Legendre basis.
-#' @param domain Coordinate-domain treatment. `"empirical"` learns bounds from
-#'   each training fold; `"unit"` uses `[0,1]`.
-#' @param bounds Optional fixed bounds. Supply a length-two numeric vector, a
-#'   list with `lower` and `upper`, or a two-column matrix.
-#' @param boundary_quantiles Training-fold quantiles used for empirical bounds.
+#' @param domain Treatment of the coordinate domain. `"empirical"` learns
+#'   bounds from each training fold; `"unit"` uses `[0,1]`.
+#' @param bounds Optional fixed bounds. Supply a numeric vector of length two,
+#'   a list with `lower` and `upper`, or a matrix with two columns.
+#' @param boundary_quantiles Quantiles from each training fold used for
+#'   empirical bounds.
 #' @param extrapolation Whether prediction values outside fitted bounds are
 #'   clamped or rejected.
 #' @param normalize Whether to divide centered series columns by their
-#'   training-fold root-mean-square values.
+#'   root-mean-square values from each training fold.
 #' @param max_features Maximum feature count before centering and rank removal.
 #' @param max_feature_elements Maximum product of rows and generated features.
 #'
@@ -79,7 +80,7 @@ odrl_series_kernel <- function(
     max_features = 1000L,
     max_feature_elements = 2.5e7) {
   if (!is.character(basis) || !length(basis) || anyNA(basis)) {
-    .odrl_abort("`basis` must contain a supported series-basis name.")
+    .odrl_abort("`basis` must contain a supported series basis name.")
   }
   basis <- .odrl_series_basis_name(basis[[1L]])
   combine <- match.arg(combine)
@@ -115,7 +116,7 @@ odrl_series_kernel <- function(
   }
   if (combine == "total_degree" && isTRUE(include_linear)) {
     .odrl_abort(
-      "`include_linear` is redundant for a total-degree Legendre basis."
+      "`include_linear` is redundant for a Legendre basis of total degree."
     )
   }
   if (!is.null(variables)) {
@@ -258,7 +259,7 @@ odrl_series_kernel <- function(
 .odrl_resolve_series_kernel <- function(kernel) {
   if (inherits(kernel, "odrl_series_kernel")) return(kernel)
   if (.odrl_is_series_kernel(kernel)) return(odrl_series_kernel(kernel))
-  .odrl_abort("The supplied object is not a series-kernel specification.")
+  .odrl_abort("The supplied object is not a series kernel specification.")
 }
 
 .odrl_series_grid <- function(spec) {

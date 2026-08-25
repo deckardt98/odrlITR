@@ -38,7 +38,7 @@ The \code{"relu"} learner also supports other activations and backends.}
 
 \item{loss}{\code{"exact"} for tree/linear; \code{"hinge"}, \code{"exponential"},
 \code{"logistic"}, or \code{"squared_hinge"} for SVM/neural learners; or a custom
-differentiable signed-margin loss. SVM custom losses use a list with
+differentiable loss of the signed margin. SVM custom losses use a list with
 \code{value} and \code{gradient} functions. Neural custom losses may use that list
 or a function returning \code{list(loss, gradient)}. If \code{NULL}, direct
 learners use exact loss and surrogate learners use hinge loss.}
@@ -53,16 +53,17 @@ objects.}
 
 \item{sl.library}{Library passed to \code{\link[=odrl_nuisance_sl]{odrl_nuisance_sl()}}.}
 
-\item{sl.library.pi}{Optional propensity-specific Super Learner library.}
+\item{sl.library.pi}{Optional Super Learner library for the propensity.}
 
-\item{sl.library.m}{Optional marginal-outcome-specific Super Learner library.}
+\item{sl.library.m}{Optional Super Learner library for the marginal outcome.}
 
 \item{sl_inner_folds}{Super Learner's inner cross-validation folds.}
 
 \item{known_pi, known_e}{Optional known propensity on the probability or
-\code{E(A|X)} scale. This enables randomized-trial use while cross-fitting \code{m}.}
+\code{E(A|X)} scale. This enables use in randomized trials while cross-fitting
+\code{m}.}
 
-\item{propensity_bounds}{Optional two-element limits for propensity
+\item{propensity_bounds}{Optional limits of length two for propensity
 predictions. \code{NULL} performs no clipping.}
 
 \item{positive}{For factor/character treatment, the level representing
@@ -74,15 +75,15 @@ treatment \code{+1}. The second factor level is used by default.}
 
 \item{sl_env}{Environment for custom Super Learner wrappers.}
 
-\item{nuisance_fold_id}{Optional row-aligned outer-fold identifiers.
-Otherwise, treatment-stratified folds are generated.}
+\item{nuisance_fold_id}{Optional outer fold identifiers supplied for each
+row. Otherwise, treatment-stratified folds are generated.}
 }
 \value{
 An object of class \code{odrl_fit}, a list with the following principal
 components:
 \describe{
 \item{\code{policy}}{The fitted second-stage policy, including its selected
-tuning values and learner-specific diagnostics.}
+tuning values and diagnostics for the learner.}
 \item{\code{nuisance}}{The aligned nuisance predictions and first-stage
 diagnostics used to construct the score.}
 \item{\code{score}}{Raw and normalized double residual scores, their scale,
@@ -96,13 +97,13 @@ the treatment coding supplied by the user.}
 The object also records \code{call}, \code{learner}, \code{loss}, \code{control}, sample
 dimensions \code{n} and \code{p}, and elapsed \code{runtime}. Use \code{\link[=predict.odrl_fit]{predict.odrl_fit()}},
 \code{\link[=fitted.odrl_fit]{fitted.odrl_fit()}}, \code{\link[=coef.odrl_fit]{coef.odrl_fit()}}, and \code{\link[=summary.odrl_fit]{summary.odrl_fit()}} rather
-than relying on learner-specific internals.
+than relying on internals for each learner.
 }
 \description{
-\code{odrl()} cross-fits or accepts the propensity and marginal-outcome
+\code{odrl()} cross-fits or accepts the propensity and marginal outcome
 nuisances, forms double residual scores, and fits one treatment rule.
 Available policy classes are affine rules, shallow trees, kernel or
-finite-series scores, and neural networks.
+finite series scores, and neural networks.
 }
 \examples{
 data <- odrl_simulate(100, boundary = "linear", seed = 4)

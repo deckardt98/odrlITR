@@ -163,7 +163,7 @@
   )
   if (inherits(spec, "odrl_series_kernel")) {
     .odrl_abort(
-      "Finite-series specifications use a primal feature-map fit and do not ",
+      "Finite series specifications use a primal feature map and do not ",
       "form a dense kernel matrix."
     )
   }
