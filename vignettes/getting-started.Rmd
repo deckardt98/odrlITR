@@ -75,8 +75,8 @@ Example 3 of the paper uses two steps:
    \(T_1(u)=\max\{-1,\min(1,u)\}\).
 
 Clipping preserves the sign of the score and cannot increase hinge loss. The
-result is bounded by one, although it need not itself be an RKHS function. The
-paper uses this bounded score for its universal Neyman orthogonality result.
+result is bounded by one, although it need not itself be an RKHS function. More
+information can be found in the paper.
 
 This is the default for hinge loss with the Gaussian/RBF kernel. Use explicit
 bounded mode for another supported kernel:

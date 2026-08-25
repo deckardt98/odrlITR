@@ -116,8 +116,8 @@ T1(f) = max(-1, min(1, f))
 
 This is the construction in Example 3 of the paper. Clipping preserves the
 treatment rule and cannot increase hinge loss. The clipped score is bounded
-but need not remain an RKHS function. The paper uses this bounded score for
-its universal Neyman orthogonality result.
+but need not remain an RKHS function. More information can be found in the
+paper.
 
 Set `svm_hinge_mode = "bounded"` to use the same construction with another
 supported kernel, fitting first and clipping afterward. This includes the
