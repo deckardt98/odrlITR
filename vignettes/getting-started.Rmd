@@ -13,6 +13,10 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 ## Method
 
+The method is described in
+[Orthogonal double residual learning for optimal individualized treatment
+rules](https://arxiv.org/abs/2608.24085).
+
 `odrlITR` represents treatment by \(A\in\{-1,+1\}\) and estimates
 
 \[
@@ -76,7 +80,8 @@ Example 3 of the paper uses two steps:
 
 Clipping preserves the sign of the score and cannot increase hinge loss. The
 result is bounded by one, although it need not itself be an RKHS function. More
-information can be found in the paper.
+information can be found in the
+[paper](https://arxiv.org/abs/2608.24085).
 
 This is the default for hinge loss with the Gaussian/RBF kernel. Use explicit
 bounded mode for another supported kernel:

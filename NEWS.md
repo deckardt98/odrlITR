@@ -5,6 +5,8 @@
   other supported kernels.
 * Simplified the README, vignette, and function documentation and added a
   runnable installation example for the public GitHub package.
+* Added the arXiv paper to the package metadata, citation, README, vignette,
+  and package help.
 
 # odrlITR 0.1.0
 

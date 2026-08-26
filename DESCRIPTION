@@ -15,7 +15,8 @@ Description: Learns individualized treatment rules with orthogonal double
     finite series, or neural surrogate learners. The hinge SVM with bounded
     scores fits a penalized hinge score and applies hard tanh clipping.
 License: MIT + file LICENSE
-URL: https://github.com/deckardt98/odrlITR
+URL: https://github.com/deckardt98/odrlITR,
+    https://arxiv.org/abs/2608.24085
 BugReports: https://github.com/deckardt98/odrlITR/issues
 Encoding: UTF-8
 Language: en-US

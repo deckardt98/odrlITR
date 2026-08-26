@@ -15,6 +15,10 @@ residual learning. It:
 Treatment is represented internally as `-1` and `+1`; larger outcomes are
 preferred.
 
+The methodology is described in
+[Orthogonal double residual learning for optimal individualized treatment
+rules](https://arxiv.org/abs/2608.24085).
+
 ## Installation
 
 Install the public GitHub package with:
@@ -117,7 +121,7 @@ T1(f) = max(-1, min(1, f))
 This is the construction in Example 3 of the paper. Clipping preserves the
 treatment rule and cannot increase hinge loss. The clipped score is bounded
 but need not remain an RKHS function. More information can be found in the
-paper.
+[paper](https://arxiv.org/abs/2608.24085).
 
 Set `svm_hinge_mode = "bounded"` to use the same construction with another
 supported kernel, fitting first and clipping afterward. This includes the

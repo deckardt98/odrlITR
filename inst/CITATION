@@ -14,11 +14,12 @@ bibentry(
 
 bibentry(
   bibtype = "Unpublished",
-  title = "Orthogonal double residual learning for estimating individualized treatment rules",
+  title = "Orthogonal double residual learning for optimal individualized treatment rules",
   author = c(
     person("Jiaqi", "Tong"),
     person("Fan", "Li")
   ),
   year = "2026",
-  note = "Manuscript"
+  note = "arXiv:2608.24085 [stat.ME]",
+  url = "https://arxiv.org/abs/2608.24085"
 )

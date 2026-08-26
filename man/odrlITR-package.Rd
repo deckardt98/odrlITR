@@ -13,10 +13,16 @@ cross-fitted signed score
 where treatment is internally coded as \eqn{A\in\{-1,+1\}},
 \eqn{e(x)=E(A\mid X=x)}, and \eqn{m(x)=E(Y\mid X=x)}.
 }
+\references{
+Tong, J., and Li, F. (2026). "Orthogonal double residual learning for
+optimal individualized treatment rules."
+\href{https://arxiv.org/abs/2608.24085}{arXiv:2608.24085}.
+}
 \seealso{
 Useful links:
 \itemize{
   \item \url{https://github.com/deckardt98/odrlITR}
+  \item \url{https://arxiv.org/abs/2608.24085}
   \item Report bugs at \url{https://github.com/deckardt98/odrlITR/issues}
 }
 
