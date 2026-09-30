@@ -15,9 +15,7 @@ residual learning. It:
 Treatment is represented internally as `-1` and `+1`; larger outcomes are
 preferred.
 
-The methodology is described in
-[Orthogonal double residual learning for optimal individualized treatment
-rules](https://arxiv.org/abs/2608.24085).
+The methodology is described in “[Orthogonal double residual learning for optimal individualized treatment rules](https://arxiv.org/abs/2608.24085)” by Jiaqi Tong and Fan Li (2026), an arXiv preprint (arXiv:2608.24085).
 
 ## Installation
 
