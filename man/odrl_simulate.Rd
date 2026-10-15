@@ -2,23 +2,42 @@
 % Please edit documentation in R/simulate.R
 \name{odrl_simulate}
 \alias{odrl_simulate}
-\title{Simulate a simple ODRL example}
+\title{Simulate data with a known treatment rule}
 \usage{
 odrl_simulate(n = 500L, boundary = c("linear", "tree"), seed = 1L)
 }
 \arguments{
-\item{n}{Sample size.}
+\item{n}{Number of observations, at least 50.}
 
-\item{boundary}{Either \code{"linear"} or \code{"tree"}.}
+\item{boundary}{Shape of the true treatment rule, either \code{"linear"} or
+\code{"tree"}.}
 
 \item{seed}{Random seed.}
 }
 \value{
-A list containing \code{x}, \code{a}, \code{y}, and the true nuisances and rule.
+A list with one row or entry per observation.
+\describe{
+\item{\code{x}}{A numeric matrix with five covariates, named \code{X1} to \code{X5}.}
+\item{\code{a}}{Observed treatment, coded as \code{-1} or \code{+1}.}
+\item{\code{y}}{Observed outcome, with larger values preferred.}
+\item{\code{pi}}{True probability of receiving treatment \code{+1}.}
+\item{\code{e}}{True conditional treatment mean, \code{2 * pi - 1}.}
+\item{\code{m}}{True marginal outcome mean given the covariates.}
+\item{\code{tau}}{True conditional mean outcome difference between
+treatments \code{+1} and \code{-1}.}
+\item{\code{optimal}}{The true optimal treatment, \code{+1} when \code{tau >= 0}
+and \code{-1} otherwise.}
+}
 }
 \description{
-Generates an example with binary treatment, a linear propensity, a linear
-marginal outcome regression, and either a linear treatment rule or a depth-2
-tree rule.
-It is intended for examples and smoke tests, not as a scientific benchmark.
+Generate five normally distributed covariates, binary treatment, and a
+numeric outcome for examples and tests. Treatment follows a logistic model,
+the marginal outcome mean is linear, and the best treatment is determined
+by either a linear boundary or a tree with depth two.
+}
+\examples{
+dat <- odrl_simulate(n = 100, seed = 1)
+head(dat$x)
+table(dat$a)
+head(dat$optimal)
 }

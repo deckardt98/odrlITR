@@ -11,17 +11,24 @@ odrl_score(a, y, nuisance, tolerance = 1e-10, positive = NULL)
 
 \item{y}{Numeric outcome.}
 
-\item{nuisance}{An object from \code{\link[=odrl_nuisance_user]{odrl_nuisance_user()}} or
-\code{\link[=odrl_nuisance_sl]{odrl_nuisance_sl()}}.}
+\item{nuisance}{An object from \code{\link[=odrl_nuisance_user]{odrl_nuisance_user()}},
+\code{\link[=odrl_nuisance_sl]{odrl_nuisance_sl()}}, or \code{\link[=odrl_nuisance_parametric]{odrl_nuisance_parametric()}}. Predictions must
+follow the order of \code{a} and \code{y}.}
 
-\item{tolerance}{Absolute numerical tolerance.}
+\item{tolerance}{Positive threshold below which scores are treated as zero
+during fitting. The returned score retains the original values.}
 
 \item{positive}{Positive treatment level for factor or character \code{a}.}
 }
 \value{
-A numeric vector with the unthresholded score
-\code{(A - e_hat) * (Y - m_hat)}. Audit details are stored in attributes.
+A numeric vector of raw scores. Its \code{working} attribute contains
+the scores after applying \code{tolerance}, \code{scale} is their mean absolute
+value, and \code{degenerate} indicates that all working scores are zero.
+A degenerate score uses \code{scale = 1}.
 }
 \description{
-Construct the orthogonal double residual score
+The score is \code{(A - e_hat) * (Y - m_hat)}, where treatment \code{A} is coded
+as \code{-1} or \code{+1}, \code{e_hat} predicts \code{E(A | X)}, and \code{m_hat} predicts
+\code{E(Y | X)}. The sign determines the treatment label used for fitting,
+and the absolute value determines its weight.
 }

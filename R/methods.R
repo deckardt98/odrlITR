@@ -8,7 +8,9 @@
 #' A zero score maps to the positive treatment.
 #'
 #' @param object An [odrl()] fit.
-#' @param newdata New covariates in the same representation used for fitting.
+#' @param newdata New covariates with the columns used for fitting. For a fit
+#'   made with [odrl_formula()], supply a data frame with the covariates named
+#'   in the formula. The outcome and treatment columns are not needed.
 #' @param type Return decoded treatment actions or decision scores.
 #' @param ... Unused.
 #'
@@ -17,24 +19,23 @@
 predict.odrl_fit <- function(object, newdata, type = c("action", "score"),
                              ...) {
   type <- match.arg(type)
-  newx <- .odrl_encode_x_new(newdata, object$blueprint)
+  new_x <- .odrl_encode_x_new(newdata, object$blueprint)
   if (inherits(object$policy, "odrl_policy_constant")) {
-    raw <- if (type == "score") {
-      rep(object$policy$action, nrow(newx))
-    } else {
-      rep(object$policy$action, nrow(newx))
-    }
+    prediction <- rep(object$policy$action, nrow(new_x))
   } else {
-    raw <- switch(
+    prediction <- switch(
       object$learner,
-      tree = .odrl_predict_tree(object$policy, newx, type = type),
-      linear = .odrl_predict_linear(object$policy, newx, type = type),
-      svm = .odrl_predict_svm(object$policy, newx, type = type),
-      relu = .odrl_predict_relu(object$policy, newx, type = type)
+      tree = .odrl_predict_tree(object$policy, new_x, type = type),
+      linear = .odrl_predict_linear(object$policy, new_x, type = type),
+      svm = .odrl_predict_svm(object$policy, new_x, type = type),
+      relu = .odrl_predict_relu(object$policy, new_x, type = type)
     )
   }
-  if (type == "score") return(as.numeric(raw))
-  .odrl_decode_action(as.numeric(raw), object$treatment_map)
+
+  # Learners use -1/+1 internally. Only actions are translated back to the
+  # treatment labels supplied by the user; decision scores stay numeric.
+  if (type == "score") return(as.numeric(prediction))
+  .odrl_decode_action(as.numeric(prediction), object$treatment_map)
 }
 
 #' Extract fitted treatment recommendations
@@ -64,6 +65,8 @@ coef.odrl_fit <- function(object, standardized = FALSE, ...) {
   if (!inherits(object$policy, "odrl_policy_linear")) return(NULL)
   beta <- object$policy$coefficients
   if (standardized) return(beta)
+
+  # Undo x_standardized = (x - center) / scale in the affine decision score.
   transform <- object$policy$transform
   slope <- beta[-1L] / transform$scale
   intercept <- beta[[1L]] - sum(beta[-1L] * transform$center /

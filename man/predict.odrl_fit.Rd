@@ -9,7 +9,9 @@
 \arguments{
 \item{object}{An \code{\link[=odrl]{odrl()}} fit.}
 
-\item{newdata}{New covariates in the same representation used for fitting.}
+\item{newdata}{New covariates with the columns used for fitting. For a fit
+made with \code{\link[=odrl_formula]{odrl_formula()}}, supply a data frame with the covariates named
+in the formula. The outcome and treatment columns are not needed.}
 
 \item{type}{Return decoded treatment actions or decision scores.}
 

@@ -45,6 +45,8 @@
 }
 
 .odrl_encode_treatment <- function(a, positive = NULL) {
+  # Learners use -1/+1 internally. Save the original labels so predictions
+  # can return the treatment coding the caller supplied.
   if (anyNA(a)) .odrl_abort("`a` cannot contain missing values.")
   if (is.logical(a)) {
     return(list(
@@ -55,25 +57,27 @@
     ))
   }
   if (is.factor(a) || is.character(a)) {
-    f <- if (is.factor(a)) droplevels(a) else factor(a)
-    if (nlevels(f) != 2L) .odrl_abort("`a` must have exactly two levels.")
-    lev <- levels(f)
+    treatment <- if (is.factor(a)) droplevels(a) else factor(a)
+    if (nlevels(treatment) != 2L) {
+      .odrl_abort("`a` must have exactly two levels.")
+    }
+    treatment_levels <- levels(treatment)
     if (!is.null(positive)) {
       if (length(positive) != 1L || is.na(positive) ||
           !nzchar(as.character(positive))) {
         .odrl_abort("`positive` must be one nonempty treatment level.")
       }
       positive <- as.character(positive)
-      if (!positive %in% lev) {
+      if (!positive %in% treatment_levels) {
         .odrl_abort("`positive` must be one of the two treatment levels.")
       }
-      lev <- c(setdiff(lev, positive), positive)
-      f <- factor(as.character(f), levels = lev)
+      treatment_levels <- c(setdiff(treatment_levels, positive), positive)
+      treatment <- factor(as.character(treatment), levels = treatment_levels)
     }
     return(list(
-      pm1 = ifelse(f == lev[[2L]], 1, -1),
-      positive = lev[[2L]],
-      negative = lev[[1L]],
+      pm1 = ifelse(treatment == treatment_levels[[2L]], 1, -1),
+      positive = treatment_levels[[2L]],
+      negative = treatment_levels[[1L]],
       original = if (is.factor(a)) "factor" else "character"
     ))
   }
@@ -115,6 +119,7 @@
 }
 
 .odrl_encode_x_fit <- function(x) {
+  # The blueprint records factor levels and column order for new data.
   if (is.data.frame(x)) {
     if (!ncol(x)) .odrl_abort("`x` must contain at least one covariate.")
     formula <- stats::as.formula("~ . - 1")
@@ -212,8 +217,8 @@
 }
 
 .odrl_standardize_apply <- function(x, transform) {
-  sweep(sweep(as.matrix(x), 2L, transform$center, "-"),
-        2L, transform$scale, "/")
+  centered <- sweep(as.matrix(x), 2L, transform$center, "-")
+  sweep(centered, 2L, transform$scale, "/")
 }
 
 .odrl_minmax_fit <- function(x) {
@@ -225,11 +230,12 @@
 }
 
 .odrl_minmax_apply <- function(x, transform) {
-  sweep(sweep(as.matrix(x), 2L, transform$lower, "-"),
-        2L, transform$span, "/")
+  shifted <- sweep(as.matrix(x), 2L, transform$lower, "-")
+  sweep(shifted, 2L, transform$span, "/")
 }
 
 .odrl_balanced_folds <- function(a_pm1, folds, seed) {
+  # Nuisance folds balance observed treatment, ensuring both arms are available.
   folds <- as.integer(folds)
   .odrl_check_scalar(folds, "folds", 2, length(a_pm1), integer = TRUE)
   assignment <- integer(length(a_pm1))
@@ -245,11 +251,13 @@
 }
 
 .odrl_score_folds <- function(score, folds, seed) {
+  # Policy tuning balances the treatment preferred by the residual score.
   label <- ifelse(score >= 0, 1, -1)
   assignment <- integer(length(score))
   set.seed(seed)
   counts <- table(factor(label, levels = c(-1, 1)))
   if (any(counts < folds)) {
+    # If a preferred treatment is rare, use unstratified folds.
     index <- sample.int(length(score))
     assignment[index] <- rep(seq_len(folds), length.out = length(score))
     return(assignment)
@@ -268,11 +276,9 @@
   pmax(x, 0) + log1p(exp(-abs(x)))
 }
 
-# The exponential margin loss grows too quickly for unconstrained numerical
-# optimizers when a trial iterate assigns a catastrophically wrong score.  The
-# ordinary loss is retained exactly through this cutoff.  Beyond it, its
-# tangent line gives a continuously differentiable, decreasing, convex
-# continuation without the flat gradient created by simple clipping.
+# Use exp(-margin) up to the cutoff on -margin. Beyond it, continue along the
+# tangent line to avoid overflow while keeping a nonzero gradient. This gives
+# a continuously differentiable, decreasing, convex loss.
 .odrl_exponential_cutoff <- 30
 
 .odrl_exponential_margin <- function(margin,
@@ -294,6 +300,7 @@
 .odrl_hardtanh <- function(x) pmax(-1, pmin(1, x))
 
 .odrl_empirical_criterion <- function(score, action) {
+  # All policy learners and validation folds maximize this same criterion.
   mean(as.numeric(score) * as.numeric(action))
 }
 

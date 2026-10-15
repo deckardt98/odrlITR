@@ -74,10 +74,12 @@
 
 #' Fit an orthogonal double residual treatment rule
 #'
-#' `odrl()` cross-fits or accepts the propensity and marginal outcome
-#' nuisances, forms double residual scores, and fits one treatment rule.
-#' Available policy classes are affine rules, shallow trees, kernel or
-#' finite series scores, and neural networks.
+#' `odrl()` learns a rule that recommends one of two treatments using
+#' observed covariates. It first estimates the treatment probability and
+#' mean outcome, then multiplies the treatment and outcome residuals to form
+#' a score. A policy learner uses that score to fit the treatment rule.
+#' You can choose an affine rule, a shallow tree, a kernel or finite series
+#' model, or a neural network.
 #'
 #' @param x Covariate matrix or data frame.
 #' @param a Binary treatment. Numeric values may be `{0,1}` or `{-1,+1}`.
@@ -90,12 +92,15 @@
 #'   `value` and `gradient` functions. Neural custom losses may use that list
 #'   or a function returning `list(loss, gradient)`. If `NULL`, direct
 #'   learners use exact loss and surrogate learners use hinge loss.
-#' @param nuisance `NULL`/`"superlearner"` for cross-fitted Super Learner,
-#'   `"parametric"`/`"glm"` for cross-fitted logistic treatment and linear
-#'   outcome models, an [odrl_nuisance_user()] object, a list containing `m`
-#'   plus `pi` or `e`, or a function `function(x, a, y)` returning one of those
-#'   objects.
-#' @param nuisance_folds Number of outer nuisance cross-fitting folds.
+#' @param nuisance How to obtain the treatment probability and mean outcome
+#'   predictions. Use `NULL` or `"superlearner"` for Super Learner, or
+#'   `"parametric"` or `"glm"` for logistic treatment and linear outcome
+#'   models. These options use cross-fitting, so each row is predicted by
+#'   models trained on other folds. You can also supply an
+#'   [odrl_nuisance_user()] object, a list containing `m` plus `pi` or `e`,
+#'   or a function `function(x, a, y)` returning one of those objects.
+#' @param nuisance_folds Number of folds used to obtain nuisance predictions
+#'   for held-out rows.
 #' @param nuisance_fold_id Optional outer fold identifiers supplied for each
 #'   row. Otherwise, treatment-stratified folds are generated.
 #' @param sl.library Library passed to [odrl_nuisance_sl()].
@@ -113,8 +118,7 @@
 #' @param sl_verbose Whether Super Learner prints progress.
 #' @param sl_env Environment for custom Super Learner wrappers.
 #'
-#' @return An object of class `odrl_fit`, a list with the following principal
-#'   components:
+#' @return An object of class `odrl_fit` with the following main components.
 #'   \describe{
 #'     \item{`policy`}{The fitted second-stage policy, including its selected
 #'       tuning values and diagnostics for the learner.}
@@ -130,8 +134,8 @@
 #'   }
 #'   The object also records `call`, `learner`, `loss`, `control`, sample
 #'   dimensions `n` and `p`, and elapsed `runtime`. Use [predict.odrl_fit()],
-#'   [fitted.odrl_fit()], [coef.odrl_fit()], and [summary.odrl_fit()] rather
-#'   than relying on internals for each learner.
+#'   [fitted.odrl_fit()], [coef.odrl_fit()], and [summary.odrl_fit()] to
+#'   inspect the fit and obtain treatment recommendations.
 #' @export
 #'
 #' @examples
@@ -169,14 +173,19 @@ odrl <- function(
   learner <- match.arg(learner)
   control <- .odrl_validate_control(control)
   loss_specification <- .odrl_prepare_loss(learner, loss)
+
+  # 1. Encode covariates and treatment once for the policy learner. Retain the
+  # encoding so new rows and returned treatment labels use the same convention.
   encoded <- .odrl_encode_x_fit(x)
   x_matrix <- encoded$x
-  a_info <- .odrl_encode_treatment(a, positive = positive)
+  treatment_info <- .odrl_encode_treatment(a, positive = positive)
   y <- .odrl_validate_outcome(y, nrow(x_matrix))
-  if (length(a_info$pm1) != nrow(x_matrix)) {
+  if (length(treatment_info$pm1) != nrow(x_matrix)) {
     .odrl_abort("`x`, `a`, and `y` must have matching finite rows.")
   }
   started <- proc.time()[["elapsed"]]
+
+  # 2. Obtain one aligned prediction of E(Y | X) and E(A | X) per row.
   nuisance_fit <- .odrl_resolve_nuisance(
     nuisance = nuisance, x = x, a = a, y = y,
     nuisance_folds = nuisance_folds, sl.library = sl.library,
@@ -191,7 +200,7 @@ odrl <- function(
   }
   if (!is.null(nuisance_fit$treatment_map) &&
       !identical(as.numeric(nuisance_fit$treatment_map$pm1),
-                 as.numeric(a_info$pm1))) {
+                 as.numeric(treatment_info$pm1))) {
     .odrl_abort(
       "The reused nuisance object was fitted under a different treatment ",
       "coding or row order. Refit it or align the positive treatment level."
@@ -204,8 +213,11 @@ odrl <- function(
       "prescription.", call. = FALSE
     )
   }
+
+  # 3. Form the double residual score and fit the chosen policy to its scaled
+  # values. If every score is zero, recommend +1 by the package's tie rule.
   score <- .odrl_make_score(
-    a_info$pm1, y, nuisance_fit, control$score_tolerance
+    treatment_info$pm1, y, nuisance_fit, control$score_tolerance
   )
   policy <- if (score$degenerate) {
     .odrl_constant_policy(nrow(x_matrix), action = 1)
@@ -224,6 +236,8 @@ odrl <- function(
     )
   }
   elapsed <- proc.time()[["elapsed"]] - started
+
+  # 4. Report the empirical criterion on the original, unscaled score.
   structure(list(
     call = call,
     learner = learner,
@@ -232,7 +246,7 @@ odrl <- function(
     nuisance = nuisance_fit,
     score = score,
     blueprint = encoded$blueprint,
-    treatment_map = a_info,
+    treatment_map = treatment_info,
     control = control,
     n = nrow(x_matrix),
     p = ncol(x_matrix),
@@ -248,9 +262,10 @@ odrl <- function(
 
 #' Formula interface for ODRL
 #'
-#' This interface supports standard two-sided R model formulas. The
-#' treatment column is removed before `.` is expanded, preventing accidental
-#' treatment leakage into the policy covariates.
+#' Use a formula such as `outcome ~ age + marker` to select covariates from
+#' a data frame. In `outcome ~ .`, the dot includes all columns other than
+#' the outcome and the named treatment column. Factors and interactions
+#' use the same encoding when predicting new rows.
 #'
 #' @param formula A two-sided formula `outcome ~ covariates`.
 #' @param treatment Name of the binary treatment column.
@@ -272,6 +287,8 @@ odrl_formula <- function(formula, treatment, data, ...) {
     .odrl_abort("`data` must contain the named treatment column.")
   }
   a <- data[[treatment]]
+
+  # Remove treatment before expanding `.` so it cannot become a predictor.
   analysis_data <- data
   analysis_data[[treatment]] <- NULL
   frame <- stats::model.frame(formula, data = analysis_data,

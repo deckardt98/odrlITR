@@ -2,7 +2,7 @@
 % Please edit documentation in R/nuisance.R
 \name{odrl_nuisance_user}
 \alias{odrl_nuisance_user}
-\title{Construct ODRL nuisance predictions}
+\title{Supply treatment and outcome predictions to ODRL}
 \usage{
 odrl_nuisance_user(
   m,
@@ -21,23 +21,33 @@ odrl_nuisance_user(
 
 \item{e}{Numeric predictions of \eqn{E(A\mid X)}.}
 
-\item{fold_id}{Optional outer fold identifier for auditing.}
+\item{fold_id}{Optional identifier of the held-out fold for each row.}
 
 \item{source}{Short description of how the predictions were obtained.}
 
-\item{out_of_fold}{Whether predictions are out of fold or known by design.
-The conservative default is \code{FALSE}; \code{\link[=odrl]{odrl()}} warns because ordinary
-in-sample predictions do not implement the paper's cross-fitting step.}
+\item{out_of_fold}{Set to \code{TRUE} when every supplied prediction was
+obtained from a model fitted without that row or is known by design.
+The default is \code{FALSE}, which causes \code{\link[=odrl]{odrl()}} to warn that cross-fitting
+has not been confirmed.}
 
 \item{propensity_bounds}{Optional numeric vector of length two. Use
 \code{NULL} to retain supplied probabilities exactly.}
 }
 \value{
-An object of class \code{odrl_nuisance}.
+An \code{odrl_nuisance} object containing \code{m}, \code{pi}, and \code{e}, along with
+the prediction source, fold identifiers, and clipping diagnostics. A
+scalar \code{pi} or \code{e} is repeated for all rows.
 }
 \description{
-Predictions supplied by the user should be aligned with the rows of \code{x}.
-Unless a nuisance is known by design, they should be out-of-fold predictions.
-Supply either \code{pi} or \code{e}, where \code{e = 2 * pi - 1} under the package's
-internal \eqn{\{-1,+1\}} treatment coding.
+Use this function when you have already obtained the treatment probability
+and mean outcome predictions. Supply one mean outcome prediction \code{m} per
+row, in the same order as the data passed to \code{\link[=odrl]{odrl()}}. For each estimated
+quantity, predict a row using a model fitted without that row. Known
+quantities, such as a randomized treatment probability, can be supplied
+directly.
+}
+\details{
+Supply either the treatment probability \code{pi} or the expected treatment \code{e}.
+These are related by \code{e = 2 * pi - 1} because the package uses treatment
+values \eqn{\{-1,+1\}} internally.
 }

@@ -1,3 +1,15 @@
+# odrlITR (development version)
+
+* Made the fitting and tuning code easier to follow with descriptive names,
+  explicit statistical steps, and shared helpers for repeated logic. Kept
+  public interfaces, defaults, and numerical results unchanged.
+
+* Rewrote the README and getting started guide around a complete workflow,
+  with examples for matrices, data frames, named treatments, and prediction.
+* Explained treatment recommendations, decision scores, double residual
+  scores, nuisance cross-fitting, and policy tuning in plain language.
+* Added a source reading guide and development commands for contributors.
+
 # odrlITR 0.1.1
 
 * Updated the hinge SVM with bounded scores to fit the penalized hinge problem

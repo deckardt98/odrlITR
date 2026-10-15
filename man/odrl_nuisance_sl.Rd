@@ -2,7 +2,7 @@
 % Please edit documentation in R/nuisance.R
 \name{odrl_nuisance_sl}
 \alias{odrl_nuisance_sl}
-\title{Cross-fitted Super Learner nuisances for ODRL}
+\title{Estimate treatment and outcome predictions with Super Learner}
 \usage{
 odrl_nuisance_sl(
   x,
@@ -52,8 +52,9 @@ training sample.}
 \item{positive}{For a factor or character treatment, the level representing
 treatment \code{+1}. By default, the second factor level is positive.}
 
-\item{propensity_bounds}{Optional numerical safeguard. \code{NULL} retains the
-Super Learner predictions exactly.}
+\item{propensity_bounds}{Optional lower and upper limits for predicted
+treatment probabilities, such as \code{c(0.01, 0.99)}. The default \code{NULL}
+keeps the predictions unchanged.}
 
 \item{known_pi}{Optional scalar or vector with one known propensity per row.
 This skips propensity fitting while retaining cross-fitting for the
@@ -75,12 +76,21 @@ propensity is estimated.}
 \value{
 An \code{odrl_nuisance} object containing aligned out-of-fold
 predictions. Its \code{fits} component records the libraries, coefficients,
-actual numbers of inner folds (possibly capped) and captured warnings for
-every outer fold; \code{warnings} is the unique aggregate warning ledger.
+actual numbers of inner folds, and warnings for each outer fold. The
+inner fold counts are capped by the training sample size or the smaller
+treatment arm. The \code{warnings} component collects distinct warning
+messages across folds.
 }
 \description{
-Fits the propensity \eqn{P(A=+1\mid X)} and pooled marginal outcome
-regression \eqn{E(Y\mid X)} on outer training folds and predicts held-out
-rows. Super Learner's internal cross-validation is separate from this outer
-cross-fitting layer.
+Fits the treatment probability \eqn{P(A=+1\mid X)} and mean outcome
+\eqn{E(Y\mid X)} using cross-fitting. Each fold is held out in turn while
+models are fitted on the remaining rows. The resulting predictions follow
+the original row order and can be passed directly to \code{\link[=odrl]{odrl()}}. The outcome
+model pools both treatment arms and uses covariates alone.
+}
+\details{
+Within each training set, Super Learner uses its own cross-validation
+folds to combine the candidate models in its library. \code{folds} controls
+the outer prediction folds, and \code{inner_folds} controls this model
+combination step.
 }

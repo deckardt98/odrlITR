@@ -1,5 +1,16 @@
 #' Control computational settings for ODRL
 #'
+#' Change the settings for the learner you pass to [odrl()]. Arguments starting
+#' with `tree_`, `linear_`, `svm_`, or `relu_` belong to that learner. The default
+#' settings are supplied for every learner, so you only need to name the values
+#' you want to change.
+#'
+#' SVM and neural tuning arguments accept vectors of candidate values. The
+#' learner compares their combinations by cross-validation and refits the
+#' selected combination on all training rows. A single value fixes that tuning
+#' choice. `svm_folds` and `relu_folds` control policy tuning; `nuisance_folds`
+#' in [odrl()] controls the separate first-stage estimation.
+#'
 #' @param tree_depth Maximum depth of a direct policy tree. Zero fits a
 #'   constant rule, one a stump, and two allows a root split followed by child
 #'   splits. The fitted tree may be shallower than this maximum, and search
@@ -15,7 +26,8 @@
 #' @param tree_options Named list of additional options for the tree engine.
 #'   For `policytree`, dedicated arguments such as `depth` cannot be
 #'   overridden here.
-#' @param linear_coefficient_bound Absolute MILP coefficient bound.
+#' @param linear_coefficient_bound Maximum absolute coefficient in the
+#'   mixed-integer optimization, after covariate standardization.
 #' @param linear_margin Numerical one-sided margin used to encode a strict
 #'   negative affine score. It cannot exceed `linear_coefficient_bound`.
 #' @param linear_time_limit Solver time limit in seconds.
@@ -62,7 +74,7 @@
 #' @param relu_architectures Optional list of hidden layer width vectors. Use
 #'   `integer()` for an affine score, `8L` for one hidden layer, and
 #'   `c(16L, 8L)` for two hidden layers.
-#' @param relu_activation Activation grid: `"relu"`, `"leaky_relu"`, `"tanh"`,
+#' @param relu_activation Activation grid with `"relu"`, `"leaky_relu"`, `"tanh"`,
 #'   `"sigmoid"`, or `"linear"`.
 #' @param relu_leaky_slope Slope for negative inputs to leaky ReLU.
 #' @param relu_backend `"native"`, `"nnet"`, or a list with `name`, `fit`,
@@ -79,6 +91,18 @@
 #'
 #' @return An object of class `odrl_control`.
 #' @export
+#'
+#' @examples
+#' # Fit a tree with at most two levels of splits.
+#' tree_control <- odrl_control(tree_depth = 2, seed = 1)
+#'
+#' # Compare three penalties for a linear SVM score.
+#' svm_control <- odrl_control(
+#'   svm_kernel = "linear", svm_penalty = c(0.01, 0.1, 1), seed = 1
+#' )
+#'
+#' # Use a small neural candidate grid.
+#' neural_control <- odrl_control(relu_preset = "fast", seed = 1)
 odrl_control <- function(
     tree_depth = 2L,
     tree_split_step = 1L,
@@ -122,6 +146,8 @@ odrl_control <- function(
     relu_backend = "native",
     relu_preset = NULL,
     relu_backend_options = list()) {
+  # Remember which neural settings the caller supplied. A preset fills in
+  # defaults, while explicit arguments take precedence.
   neural_explicit <- list(
     hidden_units = !missing(relu_hidden_units),
     decay = !missing(relu_decay),
@@ -172,6 +198,7 @@ odrl_control <- function(
       )
     }
   }
+  # Resolve kernel aliases once before validating and storing the settings.
   if (is.character(svm_kernel)) {
     if (!length(svm_kernel) || anyNA(svm_kernel)) {
       .odrl_abort("`svm_kernel` must contain a supported kernel name.")
@@ -199,6 +226,8 @@ odrl_control <- function(
   }
   svm_hinge_mode <- match.arg(svm_hinge_mode)
   relu_selection <- match.arg(relu_selection)
+
+  # Tree size and backend options.
   .odrl_check_scalar(tree_depth, "tree_depth", 0, Inf, integer = TRUE)
   .odrl_check_scalar(tree_split_step, "tree_split_step", 1, Inf,
                      integer = TRUE)
@@ -216,6 +245,7 @@ odrl_control <- function(
       (is.null(names(tree_options)) || any(!nzchar(names(tree_options)))))) {
     .odrl_abort("`tree_options` must be a named list.")
   }
+  # Affine rule constraints and mixed-integer solver tolerances.
   .odrl_check_scalar(linear_coefficient_bound,
                      "linear_coefficient_bound", 0, Inf, open_lower = TRUE)
   .odrl_check_scalar(linear_margin, "linear_margin", 0, Inf,
@@ -254,8 +284,11 @@ odrl_control <- function(
        any(!nzchar(names(linear_solver_options)))))) {
     .odrl_abort("`linear_solver_options` must be a named list.")
   }
+  # Kernel or series candidates and their optimization settings.
   if (!length(svm_penalty) || any(!is.finite(svm_penalty)) ||
-      any(svm_penalty <= 0)) .odrl_abort("`svm_penalty` must be positive.")
+      any(svm_penalty <= 0)) {
+    .odrl_abort("`svm_penalty` must be positive.")
+  }
   if (!length(svm_rbf_multiplier) ||
       any(!is.finite(svm_rbf_multiplier)) ||
       any(svm_rbf_multiplier <= 0)) {
@@ -278,13 +311,16 @@ odrl_control <- function(
   if (!is.list(svm_kernel_args)) {
     .odrl_abort("`svm_kernel_args` must be a list.")
   }
+  # Neural architectures, activations, and optimization settings.
   if (!length(relu_hidden_units) || any(!is.finite(relu_hidden_units)) ||
       any(relu_hidden_units < 0) ||
       any(relu_hidden_units != as.integer(relu_hidden_units))) {
     .odrl_abort("`relu_hidden_units` must contain nonnegative integers.")
   }
   if (!length(relu_decay) || any(!is.finite(relu_decay)) ||
-      any(relu_decay < 0)) .odrl_abort("`relu_decay` must be nonnegative.")
+      any(relu_decay < 0)) {
+    .odrl_abort("`relu_decay` must be nonnegative.")
+  }
   .odrl_check_scalar(relu_folds, "relu_folds", 2, Inf, integer = TRUE)
   .odrl_check_scalar(relu_restarts, "relu_restarts", 1, Inf, integer = TRUE)
   .odrl_check_scalar(relu_refit_restarts, "relu_refit_restarts", 1, Inf,
@@ -318,6 +354,8 @@ odrl_control <- function(
   .odrl_check_scalar(score_tolerance, "score_tolerance", 0, Inf,
                      open_lower = TRUE)
   .odrl_check_scalar(seed, "seed", 0, .Machine$integer.max, integer = TRUE)
+  # Store candidates in a consistent order so tuning and tie handling are
+  # reproducible. Keep user-supplied architecture order intact.
   structure(list(
     tree_depth = as.integer(tree_depth),
     tree_split_step = as.integer(tree_split_step),

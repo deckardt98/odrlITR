@@ -1,7 +1,9 @@
 .odrl_squared_distance <- function(x, y = x) {
-  x2 <- rowSums(x * x)
-  y2 <- rowSums(y * y)
-  pmax(outer(x2, y2, "+") - 2 * tcrossprod(x, y), 0)
+  x_squared_norm <- rowSums(x * x)
+  y_squared_norm <- rowSums(y * y)
+  # Squared Euclidean distances can be slightly negative from roundoff.
+  pmax(outer(x_squared_norm, y_squared_norm, "+") -
+         2 * tcrossprod(x, y), 0)
 }
 
 .odrl_median_squared_distance <- function(x, seed, max_rows = 500L) {
@@ -9,10 +11,13 @@
     set.seed(seed)
     x <- x[sample.int(nrow(x), max_rows), , drop = FALSE]
   }
-  d <- .odrl_squared_distance(x)
-  d <- d[upper.tri(d) & is.finite(d) & d > 1e-12]
-  if (!length(d)) return(1)
-  stats::median(d)
+  distances <- .odrl_squared_distance(x)
+  # Use each distinct pair once and omit coincident observations.
+  usable_pairs <- upper.tri(distances) & is.finite(distances) &
+    distances > 1e-12
+  distances <- distances[usable_pairs]
+  if (!length(distances)) return(1)
+  stats::median(distances)
 }
 
 # Kernel specifications are kept deliberately lightweight. Character kernels
@@ -192,13 +197,7 @@
     return(loss)
   }
   if (is.character(loss) && length(loss) == 1L && !is.na(loss)) {
-    name <- tolower(gsub("-", "_", loss, fixed = TRUE))
-    name <- switch(name,
-      logit = "logistic",
-      squaredhinge = "squared_hinge",
-      sq_hinge = "squared_hinge",
-      name
-    )
+    name <- .odrl_canonical_loss_name(loss)
     if (name == "logistic") {
       return(structure(list(
         name = name,
@@ -298,6 +297,8 @@
 }
 
 .odrl_finalize_bounded_hinge <- function(fit) {
+  # Clipping keeps every score in [-1, 1] without changing its treatment sign.
+  # Retain the original scores for diagnostics of the penalized kernel fit.
   raw <- fit$fitted
   fit$fitted_unclipped <- raw
   fit$fitted <- .odrl_hardtanh(raw)
@@ -319,55 +320,71 @@
   } else {
     NA_real_
   }
-  k <- .odrl_kernel_matrix(x, kernel = spec, bandwidth2 = bandwidth2)
-  if (nrow(k) == ncol(k) &&
-      max(abs(k - t(k))) > 1e-7 * max(1, max(abs(k)))) {
+  kernel_matrix <- .odrl_kernel_matrix(
+    x, kernel = spec, bandwidth2 = bandwidth2
+  )
+  if (nrow(kernel_matrix) == ncol(kernel_matrix) &&
+      max(abs(kernel_matrix - t(kernel_matrix))) >
+        1e-7 * max(1, max(abs(kernel_matrix)))) {
     .odrl_abort("The training kernel matrix must be symmetric.")
   }
+
+  # The score sign supplies the preferred treatment; its magnitude supplies
+  # the importance of getting that treatment right. Mean-one weights keep
+  # the penalty comparable across samples with different score scales.
   label <- ifelse(score >= 0, 1, -1)
-  scale <- mean(abs(score))
-  weight <- if (is.finite(scale) && scale > 0) {
-    abs(score) / scale
+  score_scale <- mean(abs(score))
+  weight <- if (is.finite(score_scale) && score_scale > 0) {
+    abs(score) / score_scale
   } else {
     rep(1, length(score))
   }
-  upper <- weight / length(score)
-  active <- which(upper > 0)
+  dual_upper <- weight / length(score)
+  active_rows <- which(dual_upper > 0)
   # Penalizing the constant offset is equivalent to using the kernel K + 1.
-  augmented <- k + 1
+  augmented_kernel <- kernel_matrix + 1
   dual_fit <- NULL
-  u <- numeric(length(score))
-  if (length(active)) {
-    active_kernel <- augmented[active, active, drop = FALSE]
-    active_label <- label[active]
-    objective <- function(active_u) {
-      signed <- active_u * active_label
-      0.5 * drop(crossprod(signed, active_kernel %*% signed)) / lambda -
-        sum(active_u)
+  dual_weights <- numeric(length(score))
+  if (length(active_rows)) {
+    active_kernel <- augmented_kernel[active_rows, active_rows, drop = FALSE]
+    active_label <- label[active_rows]
+    # optim() minimizes the negative dual objective. Each dual weight is
+    # bounded by that observation's contribution to the mean hinge loss.
+    objective <- function(active_weights) {
+      signed_weights <- active_weights * active_label
+      0.5 * drop(crossprod(signed_weights,
+                          active_kernel %*% signed_weights)) / lambda -
+        sum(active_weights)
     }
-    gradient <- function(active_u) {
-      signed <- active_u * active_label
-      active_label * drop(active_kernel %*% signed) / lambda - 1
+    gradient <- function(active_weights) {
+      signed_weights <- active_weights * active_label
+      active_label * drop(active_kernel %*% signed_weights) / lambda - 1
     }
     set.seed(seed)
     dual_fit <- stats::optim(
-      par = upper[active] / 2, fn = objective, gr = gradient,
-      method = "L-BFGS-B", lower = 0, upper = upper[active],
+      par = dual_upper[active_rows] / 2, fn = objective, gr = gradient,
+      method = "L-BFGS-B", lower = 0, upper = dual_upper[active_rows],
       control = list(maxit = maxit, factr = 1e8)
     )
-    u[active] <- pmin(pmax(dual_fit$par, 0), upper[active])
+    dual_weights[active_rows] <- pmin(
+      pmax(dual_fit$par, 0), dual_upper[active_rows]
+    )
   }
-  signed <- u * label
-  intercept <- sum(signed) / lambda
-  alpha <- signed / lambda
-  fitted <- intercept + drop(k %*% alpha)
+
+  # Recover the score f(x) = intercept + K(x, training_x) %*% alpha.
+  # The primal-dual gap measures how closely the optimization problems agree.
+  signed_weights <- dual_weights * label
+  intercept <- sum(signed_weights) / lambda
+  alpha <- signed_weights / lambda
+  fitted <- intercept + drop(kernel_matrix %*% alpha)
   norm_squared <- max(
-    intercept^2 + drop(crossprod(alpha, k %*% alpha)), 0
+    intercept^2 + drop(crossprod(alpha, kernel_matrix %*% alpha)), 0
   )
   primal <- mean(weight * pmax(1 - label * fitted, 0)) +
     0.5 * lambda * norm_squared
-  dual <- sum(u) -
-    0.5 * drop(crossprod(signed, augmented %*% signed)) / lambda
+  dual <- sum(dual_weights) -
+    0.5 * drop(crossprod(signed_weights,
+                        augmented_kernel %*% signed_weights)) / lambda
   fit <- list(
     intercept = intercept,
     alpha = alpha,
@@ -402,12 +419,16 @@
   } else {
     NA_real_
   }
-  k <- .odrl_kernel_matrix(x, kernel = spec, bandwidth2 = bandwidth2)
-  if (nrow(k) == ncol(k) &&
-      max(abs(k - t(k))) > 1e-7 * max(1, max(abs(k)))) {
+  kernel_matrix <- .odrl_kernel_matrix(
+    x, kernel = spec, bandwidth2 = bandwidth2
+  )
+  if (nrow(kernel_matrix) == ncol(kernel_matrix) &&
+      max(abs(kernel_matrix - t(kernel_matrix))) >
+        1e-7 * max(1, max(abs(kernel_matrix)))) {
     .odrl_abort("The training kernel matrix must be symmetric.")
   }
   loss_spec <- .odrl_resolve_surrogate_loss(loss)
+  # Use the score sign as a label and its normalized magnitude as a weight.
   label <- ifelse(score >= 0, 1, -1)
   score_scale <- mean(abs(score))
   weight <- if (is.finite(score_scale) && score_scale > 0) {
@@ -416,23 +437,27 @@
     rep(1, length(score))
   }
   n <- length(score)
+  # theta stores the intercept followed by one coefficient per training row.
+  # A positive signed margin means agreement with the preferred treatment.
+  # Penalize both the intercept and the squared kernel-function norm.
   objective <- function(theta) {
     intercept <- theta[[1L]]
     alpha <- theta[-1L]
-    raw <- intercept + drop(k %*% alpha)
+    raw <- intercept + drop(kernel_matrix %*% alpha)
     margin <- label * raw
     mean(weight * loss_spec$value(margin)) +
       0.5 * lambda * (intercept^2 +
-        drop(crossprod(alpha, k %*% alpha)))
+        drop(crossprod(alpha, kernel_matrix %*% alpha)))
   }
   gradient <- function(theta) {
     intercept <- theta[[1L]]
     alpha <- theta[-1L]
-    raw <- intercept + drop(k %*% alpha)
+    raw <- intercept + drop(kernel_matrix %*% alpha)
     margin <- label * raw
-    derivative <- weight * loss_spec$gradient(margin) * label / n
-    c(sum(derivative) + lambda * intercept,
-      drop(k %*% derivative) + lambda * drop(k %*% alpha))
+    score_derivative <- weight * loss_spec$gradient(margin) * label / n
+    c(sum(score_derivative) + lambda * intercept,
+      drop(kernel_matrix %*% score_derivative) +
+        lambda * drop(kernel_matrix %*% alpha))
   }
   set.seed(seed)
   initial_intercept <- if (isTRUE(loss_spec$builtin) &&
@@ -449,6 +474,7 @@
   )
   attempts <- 1L
   if (fit$convergence != 0L) {
+    # Continue from the fitted parameters with a larger iteration budget.
     retry <- stats::optim(
       par = fit$par, fn = objective, gr = gradient,
       method = "L-BFGS-B",
@@ -466,14 +492,14 @@
     lambda = lambda,
     loss = loss_spec$name,
     loss_spec = loss_spec,
-    fitted = fit$par[[1L]] + drop(k %*% fit$par[-1L]),
+    fitted = fit$par[[1L]] + drop(kernel_matrix %*% fit$par[-1L]),
     convergence = fit$convergence,
     message = fit$message,
     attempts = attempts,
     objective = fit$value,
     rkhs_norm = sqrt(max(
       fit$par[[1L]]^2 +
-        drop(crossprod(fit$par[-1L], k %*% fit$par[-1L])),
+        drop(crossprod(fit$par[-1L], kernel_matrix %*% fit$par[-1L])),
       0
     )),
     globally_bounded = FALSE,
@@ -488,10 +514,10 @@
     return(.odrl_predict_series_unclipped(fit, newx))
   }
   spec <- fit$kernel_spec %||% .odrl_resolve_kernel(kernel)
-  k <- .odrl_kernel_matrix(
+  kernel_matrix <- .odrl_kernel_matrix(
     newx, fit$training_x, kernel = spec, bandwidth2 = fit$bandwidth2
   )
-  (fit$intercept %||% 0) + drop(k %*% fit$alpha)
+  (fit$intercept %||% 0) + drop(kernel_matrix %*% fit$alpha)
 }
 
 .odrl_predict_kernel_raw <- function(fit, newx, kernel = NULL) {
@@ -573,21 +599,22 @@
 .odrl_fit_svm <- function(x, score, control, loss) {
   loss_spec <- .odrl_resolve_surrogate_loss(loss)
   kernel_spec <- .odrl_resolve_kernel(control$svm_kernel, control = control)
-  hinge_mode <- .odrl_effective_hinge_mode(
-    kernel_spec, control$svm_hinge_mode %||% "auto"
-  )
   folds <- min(control$svm_folds, nrow(x))
   fold_id <- .odrl_score_folds(score, folds, control$seed + 300L)
   grid <- .odrl_kernel_grid(control)
   criterion <- matrix(NA_real_, nrow(grid), folds)
   convergence <- matrix(NA_integer_, nrow(grid), folds)
   started <- proc.time()[["elapsed"]]
-  for (j in seq_len(nrow(grid))) {
-    candidate <- as.list(grid[j, , drop = FALSE])
+
+  # Compare candidates by the held-out double residual criterion.
+  # Fit preprocessing on each training fold so the holdout remains unseen.
+  for (candidate_index in seq_len(nrow(grid))) {
+    candidate <- as.list(grid[candidate_index, , drop = FALSE])
     for (fold in seq_len(folds)) {
       train <- fold_id != fold
       holdout <- !train
       if (inherits(kernel_spec, "odrl_series_kernel")) {
+        # The series learner fits its own feature map from the training rows.
         train_x <- x[train, , drop = FALSE]
         holdout_x <- x[holdout, , drop = FALSE]
       } else {
@@ -601,17 +628,21 @@
       }
       fit <- .odrl_fit_svm_candidate(
         train_x, score[train], control, loss_spec, candidate,
-        control$seed + 10000L * j + fold
+        control$seed + 10000L * candidate_index + fold
       )
       raw <- .odrl_predict_kernel_raw(fit, holdout_x)
       action <- ifelse(raw >= 0, 1, -1)
-      criterion[j, fold] <- .odrl_empirical_criterion(score[holdout], action)
-      convergence[j, fold] <- fit$convergence
+      criterion[candidate_index, fold] <- .odrl_empirical_criterion(
+        score[holdout], action
+      )
+      convergence[candidate_index, fold] <- fit$convergence
     }
   }
   grid$mean_criterion <- rowMeans(criterion)
   grid$se_criterion <- apply(criterion, 1L, stats::sd) / sqrt(folds)
   grid$convergence_failures <- rowSums(convergence != 0L, na.rm = TRUE)
+  # Select among candidates that converged in every fold, then refit using
+  # preprocessing learned from the full sample.
   eligible <- which(
     grid$convergence_failures == 0L & is.finite(grid$mean_criterion)
   )
@@ -691,11 +722,11 @@
 
 .odrl_predict_svm <- function(object, newx, type = c("action", "score")) {
   type <- match.arg(type)
-  z <- if (is.null(object$transform)) {
+  transformed_x <- if (is.null(object$transform)) {
     newx
   } else {
     .odrl_standardize_apply(newx, object$transform)
   }
-  raw <- .odrl_predict_kernel_raw(object$fit, z)
+  raw <- .odrl_predict_kernel_raw(object$fit, transformed_x)
   if (type == "score") raw else ifelse(raw >= 0, 1, -1)
 }

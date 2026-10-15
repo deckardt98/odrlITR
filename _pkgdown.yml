@@ -1,23 +1,34 @@
 url: https://deckardt98.github.io/odrlITR/
 template:
   bootstrap: 5
+home:
+  title: Learn individualized treatment rules with odrlITR
+  description: >
+    Fit a rule for choosing between two treatments from observed characteristics,
+    treatments, and outcomes using orthogonal double residual learning.
 reference:
-  - title: Fit treatment rules
+  - title: Fit a treatment rule
+    desc: Start with a matrix or data frame and choose a learner.
     contents:
       - odrl
       - odrl_formula
       - odrl_control
-  - title: Nuisance estimation
-    contents:
-      - odrl_nuisance_sl
-      - odrl_nuisance_parametric
-      - odrl_nuisance_user
-  - title: Methods and utilities
+  - title: Make recommendations and inspect a fit
     contents:
       - predict.odrl_fit
       - fitted.odrl_fit
-      - print.odrl_fit
       - summary.odrl_fit
+      - print.odrl_fit
       - coef.odrl_fit
+  - title: Estimate or supply nuisance predictions
+    desc: Estimate treatment probabilities and mean outcomes before fitting a rule.
+    contents:
+      - odrl_nuisance_parametric
+      - odrl_nuisance_sl
+      - odrl_nuisance_user
+  - title: Explore the method
+    contents:
       - odrl_score
+      - odrl_series_kernel
       - odrl_simulate
+      - odrlITR-package

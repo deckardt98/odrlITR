@@ -43,13 +43,16 @@ differentiable loss of the signed margin. SVM custom losses use a list with
 or a function returning \code{list(loss, gradient)}. If \code{NULL}, direct
 learners use exact loss and surrogate learners use hinge loss.}
 
-\item{nuisance}{\code{NULL}/\code{"superlearner"} for cross-fitted Super Learner,
-\code{"parametric"}/\code{"glm"} for cross-fitted logistic treatment and linear
-outcome models, an \code{\link[=odrl_nuisance_user]{odrl_nuisance_user()}} object, a list containing \code{m}
-plus \code{pi} or \code{e}, or a function \verb{function(x, a, y)} returning one of those
-objects.}
+\item{nuisance}{How to obtain the treatment probability and mean outcome
+predictions. Use \code{NULL} or \code{"superlearner"} for Super Learner, or
+\code{"parametric"} or \code{"glm"} for logistic treatment and linear outcome
+models. These options use cross-fitting, so each row is predicted by
+models trained on other folds. You can also supply an
+\code{\link[=odrl_nuisance_user]{odrl_nuisance_user()}} object, a list containing \code{m} plus \code{pi} or \code{e},
+or a function \verb{function(x, a, y)} returning one of those objects.}
 
-\item{nuisance_folds}{Number of outer nuisance cross-fitting folds.}
+\item{nuisance_folds}{Number of folds used to obtain nuisance predictions
+for held-out rows.}
 
 \item{sl.library}{Library passed to \code{\link[=odrl_nuisance_sl]{odrl_nuisance_sl()}}.}
 
@@ -79,8 +82,7 @@ treatment \code{+1}. The second factor level is used by default.}
 row. Otherwise, treatment-stratified folds are generated.}
 }
 \value{
-An object of class \code{odrl_fit}, a list with the following principal
-components:
+An object of class \code{odrl_fit} with the following main components.
 \describe{
 \item{\code{policy}}{The fitted second-stage policy, including its selected
 tuning values and diagnostics for the learner.}
@@ -96,14 +98,16 @@ the treatment coding supplied by the user.}
 }
 The object also records \code{call}, \code{learner}, \code{loss}, \code{control}, sample
 dimensions \code{n} and \code{p}, and elapsed \code{runtime}. Use \code{\link[=predict.odrl_fit]{predict.odrl_fit()}},
-\code{\link[=fitted.odrl_fit]{fitted.odrl_fit()}}, \code{\link[=coef.odrl_fit]{coef.odrl_fit()}}, and \code{\link[=summary.odrl_fit]{summary.odrl_fit()}} rather
-than relying on internals for each learner.
+\code{\link[=fitted.odrl_fit]{fitted.odrl_fit()}}, \code{\link[=coef.odrl_fit]{coef.odrl_fit()}}, and \code{\link[=summary.odrl_fit]{summary.odrl_fit()}} to
+inspect the fit and obtain treatment recommendations.
 }
 \description{
-\code{odrl()} cross-fits or accepts the propensity and marginal outcome
-nuisances, forms double residual scores, and fits one treatment rule.
-Available policy classes are affine rules, shallow trees, kernel or
-finite series scores, and neural networks.
+\code{odrl()} learns a rule that recommends one of two treatments using
+observed covariates. It first estimates the treatment probability and
+mean outcome, then multiplies the treatment and outcome residuals to form
+a score. A policy learner uses that score to fit the treatment rule.
+You can choose an affine rule, a shallow tree, a kernel or finite series
+model, or a neural network.
 }
 \examples{
 data <- odrl_simulate(100, boundary = "linear", seed = 4)
