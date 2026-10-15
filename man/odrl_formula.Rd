@@ -19,7 +19,8 @@ odrl_formula(formula, treatment, data, ...)
 An \code{odrl_fit} object.
 }
 \description{
-This interface supports standard two-sided R model formulas. The
-treatment column is removed before \code{.} is expanded, preventing accidental
-treatment leakage into the policy covariates.
+Use a formula such as \code{outcome ~ age + marker} to select covariates from
+a data frame. In \code{outcome ~ .}, the dot includes all columns other than
+the outcome and the named treatment column. Factors and interactions
+use the same encoding when predicting new rows.
 }

@@ -1,22 +1,31 @@
-#' Construct ODRL nuisance predictions
+#' Supply treatment and outcome predictions to ODRL
 #'
-#' Predictions supplied by the user should be aligned with the rows of `x`.
-#' Unless a nuisance is known by design, they should be out-of-fold predictions.
-#' Supply either `pi` or `e`, where `e = 2 * pi - 1` under the package's
-#' internal \eqn{\{-1,+1\}} treatment coding.
+#' Use this function when you have already obtained the treatment probability
+#' and mean outcome predictions. Supply one mean outcome prediction `m` per
+#' row, in the same order as the data passed to [odrl()]. For each estimated
+#' quantity, predict a row using a model fitted without that row. Known
+#' quantities, such as a randomized treatment probability, can be supplied
+#' directly.
+#'
+#' Supply either the treatment probability `pi` or the expected treatment `e`.
+#' These are related by `e = 2 * pi - 1` because the package uses treatment
+#' values \eqn{\{-1,+1\}} internally.
 #'
 #' @param m Numeric predictions of \eqn{E(Y\mid X)}.
 #' @param pi Numeric predictions of \eqn{P(A=+1\mid X)}.
 #' @param e Numeric predictions of \eqn{E(A\mid X)}.
-#' @param fold_id Optional outer fold identifier for auditing.
+#' @param fold_id Optional identifier of the held-out fold for each row.
 #' @param source Short description of how the predictions were obtained.
-#' @param out_of_fold Whether predictions are out of fold or known by design.
-#'   The conservative default is `FALSE`; [odrl()] warns because ordinary
-#'   in-sample predictions do not implement the paper's cross-fitting step.
+#' @param out_of_fold Set to `TRUE` when every supplied prediction was
+#'   obtained from a model fitted without that row or is known by design.
+#'   The default is `FALSE`, which causes [odrl()] to warn that cross-fitting
+#'   has not been confirmed.
 #' @param propensity_bounds Optional numeric vector of length two. Use
 #'   `NULL` to retain supplied probabilities exactly.
 #'
-#' @return An object of class `odrl_nuisance`.
+#' @return An `odrl_nuisance` object containing `m`, `pi`, and `e`, along with
+#'   the prediction source, fold identifiers, and clipping diagnostics. A
+#'   scalar `pi` or `e` is repeated for all rows.
 #' @export
 odrl_nuisance_user <- function(
     m, pi = NULL, e = NULL, fold_id = NULL,
@@ -32,6 +41,8 @@ odrl_nuisance_user <- function(
   if (is.null(pi) == is.null(e)) {
     .odrl_abort("Supply exactly one of `pi` and `e`.")
   }
+
+  # Convert either treatment scale to probabilities before applying bounds.
   if (!is.null(pi)) {
     if (!is.numeric(pi) || is.factor(pi)) {
       .odrl_abort("`pi` must be a genuinely numeric prediction vector.")
@@ -55,6 +66,8 @@ odrl_nuisance_user <- function(
     }
     raw_pi <- (e + 1) / 2
   }
+
+  # Preserve raw probabilities so the effect of optional clipping is visible.
   if (!is.null(propensity_bounds)) {
     if (length(propensity_bounds) != 2L ||
         any(!is.finite(propensity_bounds)) ||
@@ -109,18 +122,21 @@ odrl_nuisance_user <- function(
       (is.numeric(fold_id) && any(!is.finite(fold_id)))) {
     .odrl_abort("`fold_id` cannot contain missing or non-finite values.")
   }
-  label <- as.character(fold_id)
-  if (any(!nzchar(trimws(label)))) {
+  row_labels <- as.character(fold_id)
+  if (any(!nzchar(trimws(row_labels)))) {
     .odrl_abort("`fold_id` cannot contain empty labels.")
   }
-  levels <- unique(label)
-  if (length(levels) < 2L) {
+  fold_labels <- unique(row_labels)
+  if (length(fold_labels) < 2L) {
     .odrl_abort("`fold_id` must identify at least two nonempty folds.")
   }
-  id <- match(label, levels)
+
+  # Normalize labels in order of first appearance, preserving that order in
+  # the diagnostics even when the supplied labels are factors.
+  id <- match(row_labels, fold_labels)
   if (min_training_n > 0L) {
     training_sizes <- vapply(
-      seq_along(levels), function(fold) sum(id != fold), integer(1)
+      seq_along(fold_labels), function(fold) sum(id != fold), integer(1)
     )
     if (any(training_sizes < min_training_n)) {
       minimum_label <- if (identical(as.integer(min_training_n), 2L)) {
@@ -135,9 +151,9 @@ odrl_nuisance_user <- function(
     }
   }
   if (!is.null(a_pm1) && require_training_arms) {
-    for (fold in seq_along(levels)) {
-      counts <- table(factor(a_pm1[id != fold], levels = c(-1, 1)))
-      if (min(counts) < 2L) {
+    for (fold in seq_along(fold_labels)) {
+      arm_counts <- table(factor(a_pm1[id != fold], levels = c(-1, 1)))
+      if (min(arm_counts) < 2L) {
         .odrl_abort(
           "Each user-specified outer training set must contain at least two ",
           "observations from each treatment arm."
@@ -147,8 +163,8 @@ odrl_nuisance_user <- function(
   }
   list(
     id = if (normalize) as.integer(id) else fold_id,
-    labels = levels,
-    folds = length(levels),
+    labels = fold_labels,
+    folds = length(fold_labels),
     source = "user supplied"
   )
 }
@@ -157,79 +173,120 @@ odrl_nuisance_user <- function(
     a_pm1, folds, seed, require_training_arms = TRUE) {
   folds <- as.integer(folds)
   .odrl_check_scalar(folds, "folds", 2, length(a_pm1), integer = TRUE)
-  counts <- table(factor(a_pm1, levels = c(-1, 1)))
-  if (require_training_arms && min(counts) < folds) {
+  arm_counts <- table(factor(a_pm1, levels = c(-1, 1)))
+  if (require_training_arms && min(arm_counts) < folds) {
     .odrl_abort("Each treatment arm must contain at least `folds` rows.")
   }
 
   set.seed(seed)
-  assignment <- integer(length(a_pm1))
-  total_load <- integer(folds)
-  for (value in c(-1, 1)) {
-    index <- sample(which(a_pm1 == value))
-    base <- length(index) %/% folds
-    remainder <- length(index) %% folds
-    arm_load <- rep.int(base, folds)
-    if (remainder > 0L) {
-      # Put this arm's remainder into the currently smallest folds. Random
-      # tie-breaking preserves exchangeability while balancing total size.
-      priority <- order(total_load, stats::runif(folds))
-      arm_load[priority[seq_len(remainder)]] <-
-        arm_load[priority[seq_len(remainder)]] + 1L
+  fold_id <- integer(length(a_pm1))
+  fold_sizes <- integer(folds)
+  for (arm in c(-1, 1)) {
+    arm_rows <- sample(which(a_pm1 == arm))
+    rows_per_fold <- length(arm_rows) %/% folds
+    extra_rows <- length(arm_rows) %% folds
+    arm_fold_sizes <- rep.int(rows_per_fold, folds)
+    if (extra_rows > 0L) {
+      # Spread each arm evenly, giving its extra rows to the smallest folds.
+      # Random tie breaking keeps equally sized folds interchangeable.
+      priority <- order(fold_sizes, stats::runif(folds))
+      smallest_folds <- priority[seq_len(extra_rows)]
+      arm_fold_sizes[smallest_folds] <- arm_fold_sizes[smallest_folds] + 1L
     }
-    labels <- rep.int(seq_len(folds), arm_load)
-    assignment[index] <- sample(labels, length(labels), replace = FALSE)
-    total_load <- total_load + arm_load
+    fold_labels <- rep.int(seq_len(folds), arm_fold_sizes)
+    fold_id[arm_rows] <- sample(
+      fold_labels, length(fold_labels), replace = FALSE
+    )
+    fold_sizes <- fold_sizes + arm_fold_sizes
   }
-  assignment
+  fold_id
 }
 
 .odrl_crossfit_fold_spec <- function(a_pm1, folds, fold_id, seed,
                                      require_training_arms = TRUE) {
-  if (is.null(fold_id)) {
-    id <- .odrl_treatment_stratified_folds(
-      a_pm1, folds, seed,
-      require_training_arms = require_training_arms
-    )
-    if (any(vapply(
-      seq_len(as.integer(folds)), function(fold) sum(id != fold), integer(1)
-    ) < 2L)) {
-      .odrl_abort(
-        "Each outer training set must contain at least two observations; ",
-        "reduce `folds`."
-      )
-    }
-    if (require_training_arms) {
-      for (fold in seq_len(as.integer(folds))) {
-        counts <- table(factor(a_pm1[id != fold], levels = c(-1, 1)))
-        if (min(counts) < 2L) {
-          .odrl_abort(
-            "Each outer training set must contain at least two observations ",
-            "from each treatment arm; reduce `folds`."
-          )
-        }
-      }
-    }
-    return(list(
-      id = id,
-      labels = as.character(seq_len(as.integer(folds))),
-      folds = as.integer(folds),
-      source = "treatment-stratified"
+  if (!is.null(fold_id)) {
+    return(.odrl_validate_fold_id(
+      fold_id, length(a_pm1), a_pm1 = a_pm1,
+      require_training_arms = require_training_arms,
+      min_training_n = 2L, normalize = TRUE
     ))
   }
-  .odrl_validate_fold_id(
-    fold_id, length(a_pm1), a_pm1 = a_pm1,
-    require_training_arms = require_training_arms,
-    min_training_n = 2L, normalize = TRUE
+
+  # Each fold supplies predictions only for its held-out rows. Check the
+  # complementary training sets before any model fitting starts.
+  id <- .odrl_treatment_stratified_folds(
+    a_pm1, folds, seed,
+    require_training_arms = require_training_arms
+  )
+  fold_numbers <- seq_len(as.integer(folds))
+  training_sizes <- vapply(
+    fold_numbers, function(fold) sum(id != fold), integer(1)
+  )
+  if (any(training_sizes < 2L)) {
+    .odrl_abort(
+      "Each outer training set must contain at least two observations; ",
+      "reduce `folds`."
+    )
+  }
+  if (require_training_arms) {
+    for (fold in fold_numbers) {
+      arm_counts <- table(factor(a_pm1[id != fold], levels = c(-1, 1)))
+      if (min(arm_counts) < 2L) {
+        .odrl_abort(
+          "Each outer training set must contain at least two observations ",
+          "from each treatment arm; reduce `folds`."
+        )
+      }
+    }
+  }
+  list(
+    id = id,
+    labels = as.character(fold_numbers),
+    folds = as.integer(folds),
+    source = "treatment-stratified"
   )
 }
 
-#' Cross-fitted Super Learner nuisances for ODRL
+# Convert a known treatment probability or mean to one probability per row.
+# Both nuisance engines use this conversion and skip propensity fitting when
+# it returns a vector. NULL means that the propensity must be estimated.
+.odrl_known_propensity <- function(known_pi, known_e, n) {
+  if (!is.null(known_pi) && !is.null(known_e)) {
+    .odrl_abort("Supply at most one of `known_pi` and `known_e`.")
+  }
+  if (is.null(known_pi) && is.null(known_e)) return(NULL)
+
+  supplied <- if (!is.null(known_pi)) known_pi else known_e
+  if (!is.numeric(supplied) || is.factor(supplied)) {
+    .odrl_abort("Known propensity values must be genuinely numeric.")
+  }
+  probability <- if (!is.null(known_pi)) {
+    as.numeric(known_pi)
+  } else {
+    (as.numeric(known_e) + 1) / 2
+  }
+  if (length(probability) == 1L) probability <- rep(probability, n)
+  if (length(probability) != n || any(!is.finite(probability)) ||
+      any(probability < 0 | probability > 1)) {
+    .odrl_abort(
+      "Known propensity values must align with rows and lie in [0,1]."
+    )
+  }
+  probability
+}
+
+#' Estimate treatment and outcome predictions with Super Learner
 #'
-#' Fits the propensity \eqn{P(A=+1\mid X)} and pooled marginal outcome
-#' regression \eqn{E(Y\mid X)} on outer training folds and predicts held-out
-#' rows. Super Learner's internal cross-validation is separate from this outer
-#' cross-fitting layer.
+#' Fits the treatment probability \eqn{P(A=+1\mid X)} and mean outcome
+#' \eqn{E(Y\mid X)} using cross-fitting. Each fold is held out in turn while
+#' models are fitted on the remaining rows. The resulting predictions follow
+#' the original row order and can be passed directly to [odrl()]. The outcome
+#' model pools both treatment arms and uses covariates alone.
+#'
+#' Within each training set, Super Learner uses its own cross-validation
+#' folds to combine the candidate models in its library. `folds` controls
+#' the outer prediction folds, and `inner_folds` controls this model
+#' combination step.
 #'
 #' @param x Covariate matrix or data frame.
 #' @param a Binary treatment, coded as `{0,1}`, `{-1,+1}`, logical, or a
@@ -254,8 +311,9 @@ odrl_nuisance_user <- function(
 #' @param seed Reproducibility seed.
 #' @param positive For a factor or character treatment, the level representing
 #'   treatment `+1`. By default, the second factor level is positive.
-#' @param propensity_bounds Optional numerical safeguard. `NULL` retains the
-#'   Super Learner predictions exactly.
+#' @param propensity_bounds Optional lower and upper limits for predicted
+#'   treatment probabilities, such as `c(0.01, 0.99)`. The default `NULL`
+#'   keeps the predictions unchanged.
 #' @param known_pi Optional scalar or vector with one known propensity per row.
 #'   This skips propensity fitting while retaining cross-fitting for the
 #'   marginal outcome regression.
@@ -266,8 +324,10 @@ odrl_nuisance_user <- function(
 #'
 #' @return An `odrl_nuisance` object containing aligned out-of-fold
 #'   predictions. Its `fits` component records the libraries, coefficients,
-#'   actual numbers of inner folds (possibly capped) and captured warnings for
-#'   every outer fold; `warnings` is the unique aggregate warning ledger.
+#'   actual numbers of inner folds, and warnings for each outer fold. The
+#'   inner fold counts are capped by the training sample size or the smaller
+#'   treatment arm. The `warnings` component collects distinct warning
+#'   messages across folds.
 #' @export
 odrl_nuisance_sl <- function(
     x, a, y, folds = 5L,
@@ -281,9 +341,9 @@ odrl_nuisance_sl <- function(
   env <- .odrl_superlearner_env(env)
   encoded <- .odrl_encode_x_fit(x)
   x_matrix <- encoded$x
-  a_info <- .odrl_encode_treatment(a, positive = positive)
-  a_pm1 <- a_info$pm1
-  a01 <- as.integer(a_pm1 == 1)
+  treatment_info <- .odrl_encode_treatment(a, positive = positive)
+  a_pm1 <- treatment_info$pm1
+  treatment_01 <- as.integer(a_pm1 == 1)
   y <- .odrl_validate_outcome(y, nrow(x_matrix))
   if (length(a_pm1) != nrow(x_matrix)) {
     .odrl_abort("`x`, `a`, and `y` must have matching finite rows.")
@@ -294,113 +354,119 @@ odrl_nuisance_sl <- function(
   .odrl_check_scalar(inner_folds, "inner_folds", 2, nrow(x_matrix),
                      integer = TRUE)
   .odrl_check_scalar(seed, "seed", 0, .Machine$integer.max, integer = TRUE)
-  if (!is.null(known_pi) && !is.null(known_e)) {
-    .odrl_abort("Supply at most one of `known_pi` and `known_e`.")
-  }
-  known_probability <- NULL
-  if (!is.null(known_pi) || !is.null(known_e)) {
-    known_input <- if (!is.null(known_pi)) known_pi else known_e
-    if (!is.numeric(known_input) || is.factor(known_input)) {
-      .odrl_abort("Known propensity values must be genuinely numeric.")
-    }
-    known_probability <- if (!is.null(known_pi)) {
-      as.numeric(known_pi)
-    } else {
-      (as.numeric(known_e) + 1) / 2
-    }
-    if (length(known_probability) == 1L) {
-      known_probability <- rep(known_probability, nrow(x_matrix))
-    }
-    if (length(known_probability) != nrow(x_matrix) ||
-        any(!is.finite(known_probability)) ||
-        any(known_probability < 0 | known_probability > 1)) {
-      .odrl_abort("Known propensity values must align with rows and lie in [0,1].")
-    }
-  }
+  known_probability <- .odrl_known_propensity(
+    known_pi, known_e, nrow(x_matrix)
+  )
+  estimate_propensity <- is.null(known_probability)
+
   fold_spec <- .odrl_crossfit_fold_spec(
     a_pm1, folds, fold_id, seed,
-    require_training_arms = is.null(known_probability)
+    require_training_arms = estimate_propensity
   )
   fold_id <- fold_spec$id
   folds <- fold_spec$folds
   pi_hat <- m_hat <- rep(NA_real_, nrow(x_matrix))
   fit_audit <- vector("list", folds)
   x_frame <- as.data.frame(x_matrix, check.names = FALSE)
+
+  # Fill predictions in their original row positions. Each row is predicted
+  # exactly once, from models trained on the other folds.
   for (fold in seq_len(folds)) {
-    train <- fold_id != fold
-    holdout <- !train
-    inner_v_m <- min(as.integer(inner_folds), sum(train))
-    if (is.null(known_probability)) {
-      arm_counts <- table(factor(a01[train], levels = 0:1))
+    training_rows <- fold_id != fold
+    held_out_rows <- !training_rows
+    training_x <- x_frame[training_rows, , drop = FALSE]
+    held_out_x <- x_frame[held_out_rows, , drop = FALSE]
+    outcome_inner_folds <- min(as.integer(inner_folds), sum(training_rows))
+
+    # Fit P(A = +1 | X) with a binomial model unless the probability is known.
+    # Its inner folds are limited by the smaller treatment arm.
+    if (estimate_propensity) {
+      arm_counts <- table(factor(treatment_01[training_rows], levels = 0:1))
       if (min(arm_counts) < 2L) {
         .odrl_abort(
           "An outer training fold has fewer than two observations in one ",
           "treatment arm; reduce `folds` or use a design with more arm support."
         )
       }
-      inner_v_pi <- min(as.integer(inner_folds),
-                        as.integer(min(arm_counts)))
+      propensity_inner_folds <- min(
+        as.integer(inner_folds), as.integer(min(arm_counts))
+      )
       set.seed(seed + 1000L + fold)
-      pi_result <- .odrl_capture_warnings(SuperLearner::SuperLearner(
-        Y = a01[train],
-        X = x_frame[train, , drop = FALSE],
-        newX = x_frame[holdout, , drop = FALSE],
+      propensity_result <- .odrl_capture_warnings(SuperLearner::SuperLearner(
+        Y = treatment_01[training_rows],
+        X = training_x,
+        newX = held_out_x,
         family = stats::binomial(),
         SL.library = sl.library.pi,
         method = "method.NNloglik",
-        cvControl = list(V = inner_v_pi, stratifyCV = TRUE, shuffle = TRUE),
+        cvControl = list(
+          V = propensity_inner_folds, stratifyCV = TRUE, shuffle = TRUE
+        ),
         control = list(saveFitLibrary = FALSE),
         verbose = verbose,
         env = env
       ))
-      pi_fit <- pi_result$value
-      pi_hat[holdout] <- as.numeric(pi_fit$SL.predict)
+      propensity_fit <- propensity_result$value
+      pi_hat[held_out_rows] <- as.numeric(propensity_fit$SL.predict)
     } else {
-      pi_fit <- NULL
-      pi_result <- list(value = NULL, warnings = character())
-      pi_hat[holdout] <- known_probability[holdout]
+      propensity_fit <- NULL
+      propensity_result <- list(value = NULL, warnings = character())
+      propensity_inner_folds <- NA_integer_
+      pi_hat[held_out_rows] <- known_probability[held_out_rows]
     }
+
+    # Fit the pooled mean E(Y | X), using covariates from both treatment arms.
     set.seed(seed + 2000L + fold)
-    m_result <- .odrl_capture_warnings(SuperLearner::SuperLearner(
-      Y = y[train],
-      X = x_frame[train, , drop = FALSE],
-      newX = x_frame[holdout, , drop = FALSE],
+    outcome_result <- .odrl_capture_warnings(SuperLearner::SuperLearner(
+      Y = y[training_rows],
+      X = training_x,
+      newX = held_out_x,
       family = stats::gaussian(),
       SL.library = sl.library.m,
       method = "method.NNLS",
-      cvControl = list(V = inner_v_m, shuffle = TRUE),
+      cvControl = list(V = outcome_inner_folds, shuffle = TRUE),
       control = list(saveFitLibrary = FALSE),
       verbose = verbose,
       env = env
     ))
-    m_fit <- m_result$value
-    m_hat[holdout] <- as.numeric(m_fit$SL.predict)
+    outcome_fit <- outcome_result$value
+    m_hat[held_out_rows] <- as.numeric(outcome_fit$SL.predict)
+
+    # Retain the model choices and warnings needed to inspect each fold.
     fit_audit[[fold]] <- list(
       fold = fold,
       fold_label = fold_spec$labels[[fold]],
-      holdout_n = sum(holdout),
-      propensity_library = if (is.null(pi_fit)) "known by design" else {
-        pi_fit$libraryNames
+      holdout_n = sum(held_out_rows),
+      propensity_library = if (estimate_propensity) {
+        propensity_fit$libraryNames
+      } else {
+        "known by design"
       },
-      propensity_coef = if (is.null(pi_fit)) NA_real_ else pi_fit$coef,
-      outcome_library = m_fit$libraryNames,
-      outcome_coef = m_fit$coef,
-      propensity_inner_folds = if (is.null(pi_fit)) NA_integer_ else inner_v_pi,
-      outcome_inner_folds = inner_v_m,
-      propensity_warnings = pi_result$warnings,
-      outcome_warnings = m_result$warnings
+      propensity_coef = if (estimate_propensity) {
+        propensity_fit$coef
+      } else {
+        NA_real_
+      },
+      outcome_library = outcome_fit$libraryNames,
+      outcome_coef = outcome_fit$coef,
+      propensity_inner_folds = propensity_inner_folds,
+      outcome_inner_folds = outcome_inner_folds,
+      propensity_warnings = propensity_result$warnings,
+      outcome_warnings = outcome_result$warnings
     )
   }
   if (any(!is.finite(c(pi_hat, m_hat)))) {
     .odrl_abort("Super Learner returned non-finite nuisance predictions.")
   }
+
+  # Apply any requested probability bounds after collecting all predictions.
   nuisance <- odrl_nuisance_user(
     m = m_hat,
     pi = pi_hat,
     fold_id = fold_id,
     source = paste0(
       folds, "-fold cross-fitted marginal outcome Super Learner; propensity ",
-      if (is.null(known_probability)) {
+      if (estimate_propensity) {
         paste0("Super Learner: ", .odrl_sl_library_label(sl.library.pi))
       } else {
         "known by design"
@@ -412,11 +478,11 @@ odrl_nuisance_sl <- function(
   )
   nuisance$fits <- fit_audit
   nuisance$blueprint <- encoded$blueprint
-  nuisance$treatment_map <- a_info
+  nuisance$treatment_map <- treatment_info
   nuisance$sl.library <- sl.library
   nuisance$sl.library.pi <- sl.library.pi
   nuisance$sl.library.m <- sl.library.m
-  nuisance$known_propensity <- !is.null(known_probability)
+  nuisance$known_propensity <- !estimate_propensity
   nuisance$folds <- folds
   nuisance$fold_source <- fold_spec$source
   nuisance$fold_labels <- fold_spec$labels
@@ -427,12 +493,17 @@ odrl_nuisance_sl <- function(
   nuisance
 }
 
-#' Cross-fitted parametric nuisances for ODRL
+#' Estimate treatment and outcome predictions with regression
 #'
-#' Fits logistic and linear regressions with main effects for the propensity
-#' and pooled marginal outcome, respectively. Models are trained separately
-#' within each outer training set and predict only held-out observations. To use
-#' a richer prespecified basis, pass that basis as `x`.
+#' Fits logistic regression for the treatment probability and linear
+#' regression for the mean outcome. Both models include an intercept and the
+#' columns of `x`. The outcome model pools both treatment arms and uses
+#' covariates alone. Supply additional columns in `x` to include terms such
+#' as squares or interactions.
+#'
+#' Each fold is held out in turn while models are fitted on the remaining
+#' rows. Predictions are returned in the original row order and can be passed
+#' directly to [odrl()].
 #'
 #' @inheritParams odrl_nuisance_sl
 #'
@@ -445,9 +516,9 @@ odrl_nuisance_parametric <- function(
     propensity_bounds = NULL, known_pi = NULL, known_e = NULL) {
   encoded <- .odrl_encode_x_fit(x)
   x_matrix <- encoded$x
-  a_info <- .odrl_encode_treatment(a, positive = positive)
-  a_pm1 <- a_info$pm1
-  a01 <- as.integer(a_pm1 == 1)
+  treatment_info <- .odrl_encode_treatment(a, positive = positive)
+  a_pm1 <- treatment_info$pm1
+  treatment_01 <- as.integer(a_pm1 == 1)
   y <- .odrl_validate_outcome(y, nrow(x_matrix))
   if (length(a_pm1) != nrow(x_matrix)) {
     .odrl_abort("`x`, `a`, and `y` must have matching finite rows.")
@@ -456,35 +527,14 @@ odrl_nuisance_parametric <- function(
     .odrl_check_scalar(folds, "folds", 2, nrow(x_matrix), integer = TRUE)
   }
   .odrl_check_scalar(seed, "seed", 0, .Machine$integer.max, integer = TRUE)
-  if (!is.null(known_pi) && !is.null(known_e)) {
-    .odrl_abort("Supply at most one of `known_pi` and `known_e`.")
-  }
-  known_probability <- NULL
-  if (!is.null(known_pi) || !is.null(known_e)) {
-    known_input <- if (!is.null(known_pi)) known_pi else known_e
-    if (!is.numeric(known_input) || is.factor(known_input)) {
-      .odrl_abort("Known propensity values must be genuinely numeric.")
-    }
-    known_probability <- if (!is.null(known_pi)) {
-      as.numeric(known_pi)
-    } else {
-      (as.numeric(known_e) + 1) / 2
-    }
-    if (length(known_probability) == 1L) {
-      known_probability <- rep(known_probability, nrow(x_matrix))
-    }
-    if (length(known_probability) != nrow(x_matrix) ||
-        any(!is.finite(known_probability)) ||
-        any(known_probability < 0 | known_probability > 1)) {
-      .odrl_abort(
-        "Known propensity values must align with rows and lie in [0,1]."
-      )
-    }
-  }
+  known_probability <- .odrl_known_propensity(
+    known_pi, known_e, nrow(x_matrix)
+  )
+  estimate_propensity <- is.null(known_probability)
 
   fold_spec <- .odrl_crossfit_fold_spec(
     a_pm1, folds, fold_id, seed,
-    require_training_arms = is.null(known_probability)
+    require_training_arms = estimate_propensity
   )
   fold_id <- fold_spec$id
   folds <- fold_spec$folds
@@ -493,59 +543,73 @@ odrl_nuisance_parametric <- function(
   fit_audit <- vector("list", folds)
 
   for (fold in seq_len(folds)) {
-    train <- fold_id != fold
-    holdout <- !train
-    if (is.null(known_probability)) {
-      pi_result <- .odrl_capture_warnings(stats::glm.fit(
-        x = design[train, , drop = FALSE], y = a01[train],
+    training_rows <- fold_id != fold
+    held_out_rows <- !training_rows
+    training_design <- design[training_rows, , drop = FALSE]
+    held_out_design <- design[held_out_rows, , drop = FALSE]
+
+    # Logistic regression predicts the probability of the positive treatment.
+    if (estimate_propensity) {
+      propensity_result <- .odrl_capture_warnings(stats::glm.fit(
+        x = training_design, y = treatment_01[training_rows],
         family = stats::binomial()
       ))
-      pi_fit <- pi_result$value
-      pi_coef <- pi_fit$coefficients
-      pi_aliased <- is.na(pi_coef)
-      pi_coef[pi_aliased] <- 0
-      pi_hat[holdout] <- stats::plogis(drop(
-        design[holdout, , drop = FALSE] %*% pi_coef
+      propensity_fit <- propensity_result$value
+      propensity_coef <- propensity_fit$coefficients
+
+      # glm.fit marks redundant columns with NA coefficients. Giving those
+      # columns zero contribution preserves the fitted linear predictor.
+      propensity_aliased <- is.na(propensity_coef)
+      propensity_coef[propensity_aliased] <- 0
+      pi_hat[held_out_rows] <- stats::plogis(drop(
+        held_out_design %*% propensity_coef
       ))
     } else {
-      pi_fit <- NULL
-      pi_result <- list(value = NULL, warnings = character())
-      pi_coef <- rep(NA_real_, ncol(design))
-      names(pi_coef) <- colnames(design)
-      pi_aliased <- rep(FALSE, ncol(design))
-      pi_hat[holdout] <- known_probability[holdout]
+      propensity_fit <- NULL
+      propensity_result <- list(value = NULL, warnings = character())
+      propensity_coef <- rep(NA_real_, ncol(design))
+      names(propensity_coef) <- colnames(design)
+      propensity_aliased <- rep(FALSE, ncol(design))
+      pi_hat[held_out_rows] <- known_probability[held_out_rows]
     }
 
-    m_result <- .odrl_capture_warnings(stats::lm.fit(
-      x = design[train, , drop = FALSE], y = y[train]
+    # Linear regression predicts E(Y | X), pooling both treatment arms.
+    outcome_result <- .odrl_capture_warnings(stats::lm.fit(
+      x = training_design, y = y[training_rows]
     ))
-    m_fit <- m_result$value
-    m_coef <- m_fit$coefficients
-    m_aliased <- is.na(m_coef)
-    m_coef[m_aliased] <- 0
-    m_hat[holdout] <- drop(
-      design[holdout, , drop = FALSE] %*% m_coef
-    )
+    outcome_fit <- outcome_result$value
+    outcome_coef <- outcome_fit$coefficients
+    outcome_aliased <- is.na(outcome_coef)
+    outcome_coef[outcome_aliased] <- 0
+    m_hat[held_out_rows] <- drop(held_out_design %*% outcome_coef)
 
     fit_audit[[fold]] <- list(
       fold = fold,
       fold_label = fold_spec$labels[[fold]],
-      holdout_n = sum(holdout),
-      propensity_engine = if (is.null(pi_fit)) {
-        "known by design"
-      } else {
+      holdout_n = sum(held_out_rows),
+      propensity_engine = if (estimate_propensity) {
         "binomial logistic regression"
+      } else {
+        "known by design"
       },
-      propensity_coef = pi_coef,
-      propensity_rank = if (is.null(pi_fit)) NA_integer_ else pi_fit$rank,
-      propensity_converged = if (is.null(pi_fit)) NA else pi_fit$converged,
-      propensity_aliased = names(pi_coef)[pi_aliased],
+      propensity_coef = propensity_coef,
+      propensity_rank = if (estimate_propensity) {
+        propensity_fit$rank
+      } else {
+        NA_integer_
+      },
+      propensity_converged = if (estimate_propensity) {
+        propensity_fit$converged
+      } else {
+        NA
+      },
+      propensity_aliased = names(propensity_coef)[propensity_aliased],
       outcome_engine = "Gaussian linear regression",
-      outcome_coef = m_coef,
-      outcome_rank = m_fit$rank,
-      outcome_aliased = names(m_coef)[m_aliased],
-      propensity_warnings = pi_result$warnings,
-      outcome_warnings = m_result$warnings
+      outcome_coef = outcome_coef,
+      outcome_rank = outcome_fit$rank,
+      outcome_aliased = names(outcome_coef)[outcome_aliased],
+      propensity_warnings = propensity_result$warnings,
+      outcome_warnings = outcome_result$warnings
     )
   }
   if (any(!is.finite(c(pi_hat, m_hat)))) {
@@ -558,7 +622,7 @@ odrl_nuisance_parametric <- function(
     fold_id = fold_id,
     source = paste0(
       folds, "-fold cross-fitted main-effects linear outcome regression; ",
-      "propensity ", if (is.null(known_probability)) {
+      "propensity ", if (estimate_propensity) {
         "main-effects logistic regression"
       } else {
         "known by design"
@@ -569,9 +633,9 @@ odrl_nuisance_parametric <- function(
   )
   nuisance$fits <- fit_audit
   nuisance$blueprint <- encoded$blueprint
-  nuisance$treatment_map <- a_info
+  nuisance$treatment_map <- treatment_info
   nuisance$engine <- "parametric"
-  nuisance$known_propensity <- !is.null(known_probability)
+  nuisance$known_propensity <- !estimate_propensity
   nuisance$folds <- folds
   nuisance$fold_source <- fold_spec$source
   nuisance$fold_labels <- fold_spec$labels
@@ -601,6 +665,9 @@ odrl_nuisance_parametric <- function(
   built_in_parametric <- identical(nuisance, "parametric") ||
     identical(nuisance, "glm")
   built_in <- built_in_sl || built_in_parametric
+
+  # Known propensities and requested folds configure model fitting. Supplied
+  # predictions already carry their own values and fold information.
   if (!built_in && (!is.null(known_pi) || !is.null(known_e))) {
     .odrl_abort(
       "`known_pi` and `known_e` are only used with built-in nuisance ",
@@ -648,9 +715,15 @@ odrl_nuisance_parametric <- function(
   if (is.function(nuisance)) {
     supplied <- nuisance(x = x, a = a, y = y)
     return(.odrl_resolve_nuisance(
-      supplied, x, a, y, nuisance_folds, sl.library, sl.library.pi,
-      sl.library.m, sl_inner_folds, propensity_bounds, known_pi, known_e,
-      seed, positive, sl_verbose, sl_env, nuisance_fold_id
+      nuisance = supplied, x = x, a = a, y = y,
+      nuisance_folds = nuisance_folds,
+      sl.library = sl.library, sl.library.pi = sl.library.pi,
+      sl.library.m = sl.library.m, sl_inner_folds = sl_inner_folds,
+      propensity_bounds = propensity_bounds,
+      known_pi = known_pi, known_e = known_e,
+      seed = seed, positive = positive,
+      sl_verbose = sl_verbose, sl_env = sl_env,
+      nuisance_fold_id = nuisance_fold_id
     ))
   }
   if (is.list(nuisance)) {
@@ -682,7 +755,6 @@ odrl_nuisance_parametric <- function(
     .odrl_abort("`env` must be an environment.")
   }
   resolver <- new.env(parent = user_env)
-  namespace <- asNamespace("SuperLearner")
   exports <- getNamespaceExports("SuperLearner")
   for (name in exports) {
     if (!exists(name, envir = resolver, inherits = TRUE)) {

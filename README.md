@@ -4,203 +4,117 @@
 [![R-CMD-check](https://github.com/deckardt98/odrlITR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/deckardt98/odrlITR/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-`odrlITR` learns individualized treatment rules with orthogonal double
-residual learning. It:
+`odrlITR` is an R package for learning which of two treatments to recommend from a person's measured characteristics. You supply the characteristics, the treatment received, and the observed outcome. The package fits an individualized treatment rule that can recommend a treatment for new observations. Larger outcomes are treated as better.
 
-1. estimates the propensity score and marginal outcome regression with
-   cross-fitting, or accepts nuisance predictions supplied by the user;
-2. fits a treatment rule from the score
-   `(A - e_hat(X)) * (Y - m_hat(X))`.
+The method is **orthogonal double residual learning (ODRL)**. It first estimates how treatment and outcome vary with the characteristics, then uses the two residuals to learn a treatment rule. You can choose a decision tree, a linear rule, a kernel method, or a neural network.
 
-Treatment is represented internally as `-1` and `+1`; larger outcomes are
-preferred.
-
-The methodology is described in “[Orthogonal double residual learning for optimal individualized treatment rules](https://arxiv.org/abs/2608.24085)” by Jiaqi Tong and Fan Li (2026), an arXiv preprint (arXiv:2608.24085).
-
-## Installation
-
-Install the public GitHub package with:
+## Install
 
 ```r
 install.packages("pak")
 pak::pak("deckardt98/odrlITR")
 ```
 
-The core SVM and parametric nuisance learners use base R. Other learners use
-optional packages:
+The example below uses the included parametric models and SVM learner. It needs no optional modeling packages.
 
-```r
-install.packages(c("SuperLearner", "glmnet", "policytree", "highs", "nnet"))
-```
-
-## Quick start
-
-This example has no optional package dependencies:
+## Fit your first rule
 
 ```r
 library(odrlITR)
 
-dat <- odrl_simulate(n = 250, boundary = "linear", seed = 1)
+# Generate an example with five characteristics and two treatments.
+dat <- odrl_simulate(n = 200, boundary = "linear", seed = 1)
 
 fit <- odrl(
-  dat$x, dat$a, dat$y,
+  x = dat$x,
+  a = dat$a,
+  y = dat$y,
   learner = "svm",
-  loss = "hinge",
   nuisance = "parametric",
-  nuisance_folds = 5,
-  control = odrl_control(seed = 1)
+  control = odrl_control(
+    svm_penalty = c(0.05, 0.2),
+    svm_rbf_multiplier = 1,
+    seed = 1
+  )
 )
 
-head(predict(fit, dat$x))
-range(predict(fit, dat$x, type = "score"))
+# Recommend treatments for new observations.
+new_dat <- odrl_simulate(n = 50, boundary = "linear", seed = 2)
+head(predict(fit, newdata = new_dat$x))
+
+# Inspect the fit and its selected tuning settings.
 summary(fit)
 ```
 
-For factor or character treatment, set `positive` to the level that should be
-treated as `+1`.
+The three inputs have one row or entry per observation, in the same order.
 
-## Nuisance estimation
+| Input | Meaning | Accepted form |
+|---|---|---|
+| `x` | Characteristics available when choosing treatment | Numeric matrix or data frame, including factor columns |
+| `a` | Treatment actually received | `0`/`1`, `-1`/`+1`, logical, or two treatment labels |
+| `y` | Observed outcome, with larger values preferred | Numeric vector |
 
-The default first stage is cross-fitted Super Learner:
+Handle missing values before fitting. For factor or character treatments, use `positive` to name the treatment represented internally by `+1`. Recommendations use the original treatment labels or numeric coding.
+
+`predict(fit, newdata)` returns a treatment recommendation for each new row. `fitted(fit)` returns recommendations for the training rows. For an SVM, `predict(fit, newdata, type = "score")` returns the decision score whose sign determines the recommendation. This score is on the learner's scale, not the outcome or treatment effect scale.
+
+## Use your own data frame
+
+The formula interface names the outcome, treatment column, and predictors. This runnable example converts the simulated data into the same layout you would use for your own data.
 
 ```r
-fit <- odrl(
-  dat$x, dat$a, dat$y,
+trial <- data.frame(
+  outcome = dat$y,
+  treatment = ifelse(dat$a == 1, "active", "control"),
+  dat$x
+)
+
+formula_fit <- odrl_formula(
+  outcome ~ X1 + X2 + X3 + X4 + X5,
+  treatment = "treatment",
+  data = trial,
+  positive = "active",
   learner = "svm",
-  nuisance_folds = 5,
-  sl.library = c("SL.mean", "SL.glm", "SL.glmnet")
-)
-```
-
-Use `nuisance = "parametric"` for cross-fitted logistic propensity and linear
-outcome models. In a randomized trial, pass `known_pi` or `known_e` to use the
-known treatment mechanism while cross-fitting the outcome model.
-
-Externally estimated predictions can be supplied with
-`odrl_nuisance_user()`:
-
-```r
-nuisance <- odrl_nuisance_user(
-  m = m_oof,
-  pi = pi_oof,
-  fold_id = fold_id,
-  source = "external cross-fitting",
-  out_of_fold = TRUE
-)
-
-fit <- odrl(dat$x, dat$a, dat$y, learner = "svm", nuisance = nuisance)
-```
-
-## Policy or ITR learners
-
-| `learner` | allowed `loss` | policy class | optional package |
-|---|---|---|---|
-| `"tree"` | `"exact"` | shallow decision tree using `policytree` or a custom backend | `policytree` |
-| `"linear"` | `"exact"` | linear decision function via mixed-integer programming | `highs` |
-| `"svm"` | hinge, exponential, logistic, squared hinge, or custom | linear, Gaussian, polynomial, wavelet, Fourier, or custom RKHS score class | none |
-| `"relu"` | hinge, exponential, logistic, squared hinge, or custom | configurable feedforward neural network or external backend | optional `nnet` backend, which supports only logistic loss |
-
-The tree and linear learners directly optimize the empirical double residual
-objective, which is equivalent to a cost-sensitive classification risk. SVM
-and neural learners fit surrogate losses; their tuning parameters are selected
-by cross-validation using the same double residual objective on validation
-folds.
-
-## Hinge SVM with bounded scores
-
-For the default Gaussian kernel with hinge loss, `odrlITR` minimizes the
-penalized hinge surrogate of the empirical double residual objective, then
-applies hard tanh clipping so that the fitted score lies in `[-1, 1]`:
-
-```text
-T1(f) = max(-1, min(1, f))
-```
-
-This is the construction in Example 3 of the paper. Clipping preserves the
-treatment rule and cannot increase hinge loss. The clipped score is bounded
-but need not remain an RKHS function. More information can be found in the
-[paper](https://arxiv.org/abs/2608.24085).
-
-Set `svm_hinge_mode = "bounded"` to use the same construction with another
-supported kernel, fitting first and clipping afterward. This includes the
-linear kernel. Set
-`svm_hinge_mode = "regularized"` to return the ordinary, unclipped hinge
-score.
-
-```r
-linear_fit <- odrl(
-  dat$x, dat$a, dat$y,
-  learner = "svm", loss = "hinge",
   nuisance = "parametric",
   control = odrl_control(
-    svm_kernel = "linear",
-    svm_hinge_mode = "bounded",
-    svm_penalty = c(0.01, 0.1, 1),
-    seed = 2
+    svm_penalty = 0.1,
+    svm_rbf_multiplier = 1,
+    seed = 1
   )
 )
+
+# Prediction needs only the predictor columns.
+head(predict(formula_fit, newdata = as.data.frame(new_dat$x)))
 ```
 
-Penalizing the constant term is equivalent to using the augmented kernel
-`K + 1`. `fit$policy$selected` contains the selected penalty;
-`fit$policy$diagnostics` records convergence, the RKHS norm, and the duality
-gap.
+Replace `trial` and the column names with your data. Choose predictors that are available before the treatment decision. You can use transformations and interactions in the formula. With `outcome ~ .`, the treatment column is automatically excluded from the predictors.
 
-## Other kernels and series
+## Choose the next step
 
-Set `svm_kernel` to `"linear"`, `"rbf"`, or `"polynomial"`, or supply a
-custom kernel that is positive semidefinite. The package includes series score
-classes with Legendre, Fourier, B-spline, Haar wavelet, and local
-polynomial bases:
+**Choose the rule you want to use.** The `learner` argument controls the form of the treatment rule.
 
-```r
-series <- odrl_series_kernel(
-  basis = "legendre",
-  legendre_degree = c(1, 2, 3),
-  combine = "anova",
-  interaction_order = 2
-)
+| `learner` | Form of the rule | Extra package |
+|---|---|---|
+| `"tree"` | A sequence of splits, with a treatment in each final node | `policytree` |
+| `"linear"` | The sign of a weighted sum of predictors and an intercept | `highs` |
+| `"svm"` | A score built from a kernel or finite series | None |
+| `"relu"` | An affine score or neural network | None for the native backend; `nnet` for that backend |
 
-series_fit <- odrl(
-  dat$x, dat$a, dat$y,
-  learner = "svm", loss = "logistic",
-  nuisance = "parametric",
-  control = odrl_control(svm_kernel = series)
-)
-```
+Install an extra package only when using that learner, for example `install.packages("policytree")`. Tree and linear learners optimize the double residual criterion directly and use `loss = "exact"`. SVM and neural learners fit a surrogate loss and select tuning values by cross-validation. Their default loss is `"hinge"`; `"logistic"`, `"exponential"`, and `"squared_hinge"` are also available.
 
-Gaussian and custom kernel fits retain a dense training kernel matrix.
-Series learners use an explicit feature map and avoid that matrix.
+**Choose the first-stage models.** These models are called *nuisance models* because they support learning the treatment rule. `nuisance = "parametric"` uses logistic regression for treatment and linear regression for outcome. The default, `nuisance = NULL`, uses Super Learner and requires `SuperLearner` plus the packages used by its library, including `glmnet` for the default library. Both options use cross-fitting to predict each row from models trained on other rows. You can also supply your own predictions with `odrl_nuisance_user()`.
 
-## Neural network policies
+For a randomized trial, supply the known allocation probability through `known_pi`, such as `known_pi = 0.5` for equal allocation. This probability refers to the treatment coded as `+1`. The outcome model is still cross-fitted.
 
-`learner = "relu"` supports an affine score, a neural network with one hidden
-layer, or a neural network with multiple hidden layers. Available activation
-functions are ReLU, leaky ReLU, tanh, sigmoid, and linear. Presets provide
-compact candidate grids:
+The default `odrl()` call uses the tree learner and Super Learner. The examples above set both choices explicitly so they run with the package's included models.
 
-```r
-neural_fit <- odrl(
-  dat$x, dat$a, dat$y,
-  learner = "relu", loss = "logistic",
-  nuisance = "parametric",
-  control = odrl_control(relu_preset = "fast", seed = 3)
-)
-```
+**Adjust complexity when needed.** Use `odrl_control()` to set tree depth, SVM kernels and penalties, or neural network size. The [getting started guide](vignettes/getting-started.Rmd) explains these choices, bounded hinge scores, finite series, custom learners, and how to inspect a fitted object.
 
-Available presets are `"affine"`, `"fast"`, `"standard"`, `"flexible"`,
-and `"nnet"`. Explicit architecture and optimizer settings override a preset.
+## Learn more
 
-## Fitted objects
+- Read the [getting started guide](vignettes/getting-started.Rmd) for a step-by-step workflow and the underlying score.
+- Use `?odrl`, `?odrl_control`, and `?odrl_nuisance_user` in R, or browse the [function documentation](man).
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) for a map of the source code and instructions for making changes.
+- Report problems or suggest improvements in [GitHub issues](https://github.com/deckardt98/odrlITR/issues).
 
-Use `predict(fit)` for treatment recommendations. For SVM and neural learners,
-`predict(fit, type = "score")` returns the fitted surrogate score. Exact
-learners define a treatment rule rather than a unique decision score.
-`summary(fit)` reports the nuisance and policy fit; tuning and optimization
-details for each learner are stored in `fit$policy$diagnostics`.
-
-See `vignette("getting-started", package = "odrlITR")` and the
-[function reference](https://github.com/deckardt98/odrlITR/tree/main/man) for
-the complete interface.
-
-`odrlITR` is research software under active development.
+The methodology is described in [“Orthogonal double residual learning for optimal individualized treatment rules”](https://arxiv.org/abs/2608.24085) by Jiaqi Tong and Fan Li (2026), an arXiv preprint. Run `citation("odrlITR")` for the package and paper citations.

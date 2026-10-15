@@ -72,7 +72,8 @@ clamped or rejected.}
 \item{normalize}{Whether to divide centered series columns by their
 root-mean-square values from each training fold.}
 
-\item{max_features}{Maximum feature count before centering and rank removal.}
+\item{max_features}{Maximum feature count before centering and removal of
+constant features.}
 
 \item{max_feature_elements}{Maximum product of rows and generated features.}
 }
@@ -80,9 +81,11 @@ root-mean-square values from each training fold.}
 An object of class \code{odrl_series_kernel}.
 }
 \description{
-Construct an explicit finite-dimensional feature map (equivalently, a
-positive semidefinite kernel of finite rank) and fit the surrogate in the
-primal, avoiding a dense training Gram matrix. Character shortcuts such as
+Expand covariates into basis functions, such as polynomials or Fourier
+terms, for use with \code{learner = "svm"}. The learner fits a weighted
+combination of these features directly. This represents a finite rank
+positive semidefinite kernel without building a dense matrix of pairwise
+kernel values. Character shortcuts such as
 \code{"legendre"}, \code{"fourier"}, \code{"bspline"}, \code{"haar"}, and
 \code{"local_polynomial"} use the same defaults.
 }
@@ -92,10 +95,9 @@ interactions. Low-order ANOVA, total-degree Legendre, and full tensor-product
 constructions are optional; the full tensor can grow exponentially. Bounds,
 knots, centering, and scaling are estimated within each training fold used
 for policy fitting, then reused for validation and prediction. Fourier terms
-impose periodic endpoint behavior. The included wavelet is Haar, not a
-Cohen--Daubechies--Vial boundary-corrected wavelet. The local polynomial
-option is a partition series basis, not a local polynomial regression
-smoother.
+impose periodic endpoint behavior. The wavelet option uses the Haar basis.
+The local polynomial option uses polynomial basis functions within fixed
+partitions of each covariate's domain.
 }
 \examples{
 series <- odrl_series_kernel(

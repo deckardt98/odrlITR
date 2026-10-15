@@ -61,7 +61,8 @@ thinning candidate split points and therefore change the searched class.}
 
 \item{tree_min_node_size}{Minimum terminal node size.}
 
-\item{linear_coefficient_bound}{Absolute MILP coefficient bound.}
+\item{linear_coefficient_bound}{Maximum absolute coefficient in the
+mixed-integer optimization, after covariate standardization.}
 
 \item{linear_margin}{Numerical one-sided margin used to encode a strict
 negative affine score. It cannot exceed \code{linear_coefficient_bound}.}
@@ -151,7 +152,7 @@ represented by dedicated arguments cannot be overridden here.}
 \code{integer()} for an affine score, \code{8L} for one hidden layer, and
 \code{c(16L, 8L)} for two hidden layers.}
 
-\item{relu_activation}{Activation grid: \code{"relu"}, \code{"leaky_relu"}, \code{"tanh"},
+\item{relu_activation}{Activation grid with \code{"relu"}, \code{"leaky_relu"}, \code{"tanh"},
 \code{"sigmoid"}, or \code{"linear"}.}
 
 \item{relu_leaky_slope}{Slope for negative inputs to leaky ReLU.}
@@ -172,5 +173,27 @@ Explicit neural controls override the preset.}
 An object of class \code{odrl_control}.
 }
 \description{
-Control computational settings for ODRL
+Change the settings for the learner you pass to \code{\link[=odrl]{odrl()}}. Arguments starting
+with \code{tree_}, \code{linear_}, \code{svm_}, or \code{relu_} belong to that learner. The default
+settings are supplied for every learner, so you only need to name the values
+you want to change.
+}
+\details{
+SVM and neural tuning arguments accept vectors of candidate values. The
+learner compares their combinations by cross-validation and refits the
+selected combination on all training rows. A single value fixes that tuning
+choice. \code{svm_folds} and \code{relu_folds} control policy tuning; \code{nuisance_folds}
+in \code{\link[=odrl]{odrl()}} controls the separate first-stage estimation.
+}
+\examples{
+# Fit a tree with at most two levels of splits.
+tree_control <- odrl_control(tree_depth = 2, seed = 1)
+
+# Compare three penalties for a linear SVM score.
+svm_control <- odrl_control(
+  svm_kernel = "linear", svm_penalty = c(0.01, 0.1, 1), seed = 1
+)
+
+# Use a small neural candidate grid.
+neural_control <- odrl_control(relu_preset = "fast", seed = 1)
 }

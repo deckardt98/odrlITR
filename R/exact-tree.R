@@ -7,9 +7,12 @@
 #' @return An internal fitted policy object.
 #' @noRd
 .odrl_fit_tree <- function(x, score, control) {
+  # Each row has rewards score/2 and -score/2 for the two possible actions.
+  # Maximizing the rewards selected by a rule is equivalent to maximizing
+  # mean(score * action).
   # policytree resolves equal leaf rewards in favor of the first action. Put
   # +1 first to implement the package sign(0) = +1 convention.
-  gamma <- cbind(`+1` = score / 2, `-1` = -score / 2)
+  rewards <- cbind(`+1` = score / 2, `-1` = -score / 2)
   backend <- .odrl_tree_backend_spec(control$tree_backend %||% "policytree")
   options <- control$tree_options %||% list()
   started <- proc.time()[["elapsed"]]
@@ -30,7 +33,7 @@
     if (is.null(options$verbose)) options$verbose <- FALSE
     fit <- do.call(policytree::policy_tree, c(list(
       X = x,
-      Gamma = gamma,
+      Gamma = rewards,
       depth = control$tree_depth,
       split.step = control$tree_split_step,
       min.node.size = control$tree_min_node_size
@@ -47,7 +50,7 @@
     custom_predict <- NULL
   } else {
     fit <- backend$fit(
-      x = x, score = score, rewards = gamma,
+      x = x, score = score, rewards = rewards,
       depth = control$tree_depth,
       min_node_size = control$tree_min_node_size,
       split_step = control$tree_split_step,
@@ -127,6 +130,6 @@
       "expected one value in {1,2} for every prediction row."
     )
   }
-  action <- ifelse(action_id == 1L, 1, -1)
-  if (type == "action") action else action
+  # A tree defines actions directly, so its score is the signed action too.
+  ifelse(action_id == 1L, 1, -1)
 }

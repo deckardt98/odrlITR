@@ -186,6 +186,7 @@
     if (!is.null(Wts)) arguments$Wts <- Wts
     do.call(nnet::nnet, arguments)
   }
+  # Fit from each random start, then prefer converged fits with lower loss.
   fits <- lapply(seq_len(specification$restarts), function(restart) {
     fit_once(restart, specification$maxit)
   })
@@ -193,6 +194,7 @@
   convergence <- vapply(fits, `[[`, integer(1), "convergence")
   converged <- which(convergence == 0L & is.finite(values))
   if (!length(converged)) {
+    # Give the best finite fit more iterations, starting from its saved weights.
     finite <- which(is.finite(values))
     if (!length(finite)) {
       .odrl_abort("Every `nnet` restart returned a nonfinite objective.")
@@ -253,6 +255,8 @@
     )
   }
   epsilon <- model$options$probability_epsilon
+  # nnet returns a classification probability. Convert it to the policy score
+  # used by the policy learner, with finite values at probabilities near 0 or 1.
   stats::qlogis(pmin(pmax(probability, epsilon), 1 - epsilon))
 }
 

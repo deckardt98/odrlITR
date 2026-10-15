@@ -8,12 +8,14 @@ Authors@R: c(
            comment = c(ORCID = "0009-0005-8922-3386")),
     person("Fan", "Li", role = "aut")
   )
-Description: Learns individualized treatment rules with orthogonal double
-    residual learning. Nuisance functions may be estimated by cross-fitted
-    Super Learner or parametric models, or supplied by the user. Treatment
-    rules are fitted by direct linear or tree optimization and by kernel,
-    finite series, or neural surrogate learners. The hinge SVM with bounded
-    scores fits a penalized hinge score and applies hard tanh clipping.
+Description: Learns rules for choosing between two treatments from observed
+    covariates, treatments, and outcomes using orthogonal double residual
+    learning. Estimates treatment probabilities and mean outcomes with
+    cross-fitted Super Learner or parametric models, or accepts predictions
+    supplied by the user. Fits treatment rules with decision trees, affine
+    rules, kernel or finite series methods, and neural networks. Provides
+    formula and matrix interfaces, treatment recommendations for new data,
+    and diagnostics for model selection and optimization.
 License: MIT + file LICENSE
 URL: https://github.com/deckardt98/odrlITR,
     https://arxiv.org/abs/2608.24085

@@ -1,7 +1,7 @@
 .odrl_linear_design <- function(x, transform = NULL) {
   if (is.null(transform)) transform <- .odrl_standardize_fit(x)
-  z <- .odrl_standardize_apply(x, transform)
-  list(design = cbind(`(Intercept)` = 1, z), transform = transform)
+  standardized_x <- .odrl_standardize_apply(x, transform)
+  list(design = cbind(`(Intercept)` = 1, standardized_x), transform = transform)
 }
 
 .odrl_linear_solver_control <- function(control, feasibility_tolerance) {
@@ -45,46 +45,54 @@
 #'
 #' The binary decision variables encode the sign of an affine score. A finite
 #' coefficient box supplies valid big-M constants, one for each row. A feasible
-#' incumbent is returned when the time limit is reached; its solver status and
-#' MIP gap remain available in `diagnostics` and are never relabelled optimal.
+#' incumbent can be returned when the time limit is reached. Its solver status
+#' and remaining optimization gap are recorded in `diagnostics`.
 #'
 #' @noRd
 .odrl_fit_linear <- function(x, score, control) {
   .odrl_require("highs", "to fit an exact affine rule")
   encoded <- .odrl_linear_design(x)
-  b <- encoded$design
-  n <- nrow(b)
-  q <- ncol(b)
+  design <- encoded$design
+  n <- nrow(design)
+  coefficient_count <- ncol(design)
   bound <- control$linear_coefficient_bound
   margin <- control$linear_margin
   feasibility_tolerance <- min(1e-8, margin / 100)
-  row_bound <- bound * rowSums(abs(b))
+  row_bound <- bound * rowSums(abs(design))
 
-  lower_constraint <- cbind(b, -diag(row_bound, nrow = n))
-  upper_constraint <- cbind(b, -diag(row_bound + margin, nrow = n))
+  # The solver vector contains coefficients followed by one binary treatment
+  # indicator per row. Indicator 1 requires an affine score >= 0; indicator 0
+  # requires a score <= -margin. The coefficient bounds give a valid row_bound
+  # for each of these two inequalities.
+  lower_constraint <- cbind(design, -diag(row_bound, nrow = n))
+  upper_constraint <- cbind(design, -diag(row_bound + margin, nrow = n))
   constraint <- rbind(lower_constraint, upper_constraint)
-  lhs <- c(-row_bound, rep(-Inf, n))
-  rhs <- c(rep(Inf, n), rep(-margin, n))
-  objective <- c(rep(0, q), score / n)
-  lower <- c(rep(-bound, q), rep(0, n))
-  upper <- c(rep(bound, q), rep(1, n))
-  types <- c(rep("C", q), rep("I", n))
+  constraint_lower <- c(-row_bound, rep(-Inf, n))
+  constraint_upper <- c(rep(Inf, n), rep(-margin, n))
+
+  # Maximizing mean(score * indicator) gives the same rule as maximizing
+  # mean(score * action), since action = 2 * indicator - 1.
+  objective <- c(rep(0, coefficient_count), score / n)
+  variable_lower <- c(rep(-bound, coefficient_count), rep(0, n))
+  variable_upper <- c(rep(bound, coefficient_count), rep(1, n))
+  variable_types <- c(rep("C", coefficient_count), rep("I", n))
 
   started <- proc.time()[["elapsed"]]
   solution <- highs::highs_solve(
     L = objective,
-    lower = lower,
-    upper = upper,
+    lower = variable_lower,
+    upper = variable_upper,
     A = constraint,
-    lhs = lhs,
-    rhs = rhs,
-    types = types,
+    lhs = constraint_lower,
+    rhs = constraint_upper,
+    types = variable_types,
     maximum = TRUE,
     control = .odrl_linear_solver_control(control, feasibility_tolerance)
   )
   elapsed <- proc.time()[["elapsed"]] - started
   primal <- solution$primal_solution
-  primal_valid <- length(primal) == q + n && all(is.finite(primal)) &&
+  primal_valid <- length(primal) == coefficient_count + n &&
+    all(is.finite(primal)) &&
     isTRUE(solution$solver_msg$value_valid %||% FALSE)
   if (!primal_valid) {
     .odrl_abort(
@@ -92,9 +100,10 @@
       solution$status_message, ")."
     )
   }
-  beta <- as.numeric(primal[seq_len(q)])
-  names(beta) <- colnames(b)
-  binary_primal <- primal[q + seq_len(n)]
+  # Recover the rule and check that its actions match the solver's indicators.
+  beta <- as.numeric(primal[seq_len(coefficient_count)])
+  names(beta) <- colnames(design)
+  binary_primal <- primal[coefficient_count + seq_len(n)]
   integrality_error <- max(pmin(abs(binary_primal), abs(binary_primal - 1)))
   integrality_tolerance <- max(1e-7, 10 * feasibility_tolerance)
   if (!is.finite(integrality_error) ||
@@ -105,11 +114,11 @@
     )
   }
   encoded_action <- as.integer(binary_primal >= 0.5)
-  affine <- drop(b %*% beta)
+  affine <- drop(design %*% beta)
   action_binary <- as.integer(affine >= -feasibility_tolerance)
   constraint_value <- drop(constraint %*% primal)
-  lower_violation <- max(c(lhs - constraint_value, 0), na.rm = TRUE)
-  upper_violation <- max(c(constraint_value - rhs, 0), na.rm = TRUE)
+  lower_violation <- max(c(constraint_lower - constraint_value, 0), na.rm = TRUE)
+  upper_violation <- max(c(constraint_value - constraint_upper, 0), na.rm = TRUE)
   max_violation <- max(lower_violation, upper_violation)
   action_mismatch <- sum(action_binary != encoded_action)
   objective_audit <- mean(score * encoded_action)
@@ -125,6 +134,9 @@
     )
   }
   action <- ifelse(action_binary == 1L, 1, -1)
+
+  # A usable rule may still have an optimization gap. Record both the achieved
+  # gap and whether it meets the user's requested stopping tolerances.
   mip_gap <- as.numeric(solution$info$mip_gap %||% NA_real_)
   solver_reported_optimal <- identical(
     tolower(solution$status_message), "optimal"

@@ -2,7 +2,7 @@
 % Please edit documentation in R/nuisance.R
 \name{odrl_nuisance_parametric}
 \alias{odrl_nuisance_parametric}
-\title{Cross-fitted parametric nuisances for ODRL}
+\title{Estimate treatment and outcome predictions with regression}
 \usage{
 odrl_nuisance_parametric(
   x,
@@ -40,8 +40,9 @@ propensity is estimated.}
 \item{positive}{For a factor or character treatment, the level representing
 treatment \code{+1}. By default, the second factor level is positive.}
 
-\item{propensity_bounds}{Optional numerical safeguard. \code{NULL} retains the
-Super Learner predictions exactly.}
+\item{propensity_bounds}{Optional lower and upper limits for predicted
+treatment probabilities, such as \code{c(0.01, 0.99)}. The default \code{NULL}
+keeps the predictions unchanged.}
 
 \item{known_pi}{Optional scalar or vector with one known propensity per row.
 This skips propensity fitting while retaining cross-fitting for the
@@ -56,8 +57,14 @@ predictions and coefficient, rank, convergence, and warning diagnostics
 for each fold.
 }
 \description{
-Fits logistic and linear regressions with main effects for the propensity
-and pooled marginal outcome, respectively. Models are trained separately
-within each outer training set and predict only held-out observations. To use
-a richer prespecified basis, pass that basis as \code{x}.
+Fits logistic regression for the treatment probability and linear
+regression for the mean outcome. Both models include an intercept and the
+columns of \code{x}. The outcome model pools both treatment arms and uses
+covariates alone. Supply additional columns in \code{x} to include terms such
+as squares or interactions.
+}
+\details{
+Each fold is held out in turn while models are fitted on the remaining
+rows. Predictions are returned in the original row order and can be passed
+directly to \code{\link[=odrl]{odrl()}}.
 }

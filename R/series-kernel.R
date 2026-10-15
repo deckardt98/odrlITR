@@ -1,8 +1,10 @@
 #' Specify a finite series score class
 #'
-#' Construct an explicit finite-dimensional feature map (equivalently, a
-#' positive semidefinite kernel of finite rank) and fit the surrogate in the
-#' primal, avoiding a dense training Gram matrix. Character shortcuts such as
+#' Expand covariates into basis functions, such as polynomials or Fourier
+#' terms, for use with `learner = "svm"`. The learner fits a weighted
+#' combination of these features directly. This represents a finite rank
+#' positive semidefinite kernel without building a dense matrix of pairwise
+#' kernel values. Character shortcuts such as
 #' `"legendre"`, `"fourier"`, `"bspline"`, `"haar"`, and
 #' `"local_polynomial"` use the same defaults.
 #'
@@ -11,10 +13,9 @@
 #' constructions are optional; the full tensor can grow exponentially. Bounds,
 #' knots, centering, and scaling are estimated within each training fold used
 #' for policy fitting, then reused for validation and prediction. Fourier terms
-#' impose periodic endpoint behavior. The included wavelet is Haar, not a
-#' Cohen--Daubechies--Vial boundary-corrected wavelet. The local polynomial
-#' option is a partition series basis, not a local polynomial regression
-#' smoother.
+#' impose periodic endpoint behavior. The wavelet option uses the Haar basis.
+#' The local polynomial option uses polynomial basis functions within fixed
+#' partitions of each covariate's domain.
 #'
 #' @param basis Univariate basis family.
 #' @param legendre_degree Positive maximum degree grid for Legendre series.
@@ -44,7 +45,8 @@
 #'   clamped or rejected.
 #' @param normalize Whether to divide centered series columns by their
 #'   root-mean-square values from each training fold.
-#' @param max_features Maximum feature count before centering and rank removal.
+#' @param max_features Maximum feature count before centering and removal of
+#'   constant features.
 #' @param max_feature_elements Maximum product of rows and generated features.
 #'
 #' @return An object of class `odrl_series_kernel`.
@@ -376,6 +378,8 @@ odrl_series_kernel <- function(
   if (identical(extrapolation, "error") && any(below | above)) {
     .odrl_abort("New data lie outside the fitted series bounds.")
   }
+  # Every univariate basis below uses coordinates u in [0, 1]. Reuse the
+  # training bounds when mapping validation rows or new observations.
   u <- sweep(x, 2L, bounds$lower, "-")
   u <- sweep(u, 2L, bounds$upper - bounds$lower, "/")
   list(
@@ -386,14 +390,16 @@ odrl_series_kernel <- function(
 }
 
 .odrl_legendre_matrix <- function(u, degree) {
-  t <- 2 * u - 1
+  # The Legendre recurrence is defined on [-1, 1]. The sqrt(2k + 1)
+  # normalization gives unit squared integral on the original [0, 1] domain.
+  coordinate <- 2 * u - 1
   result <- matrix(0, nrow = length(u), ncol = degree)
   previous <- rep(1, length(u))
-  current <- t
+  current <- coordinate
   result[, 1L] <- sqrt(3) * current
   if (degree >= 2L) {
     for (order in 2:degree) {
-      next_value <- ((2 * order - 1) * t * current -
+      next_value <- ((2 * order - 1) * coordinate * current -
         (order - 1) * previous) / order
       result[, order] <- sqrt(2 * order + 1) * next_value
       previous <- current
@@ -424,6 +430,7 @@ odrl_series_kernel <- function(
   count <- 2^level - 1L
   result <- matrix(0, nrow = length(u), ncol = count)
   names <- character(count)
+  # Include the right endpoint in the last cell.
   adjusted <- pmin(u, 1 - .Machine$double.eps)
   cursor <- 0L
   for (resolution in 0:(level - 1L)) {
@@ -451,6 +458,7 @@ odrl_series_kernel <- function(
   cursor <- 0L
   for (order in 0:degree) {
     for (cell in 0:(partitions - 1L)) {
+      # Drop one constant indicator because the fitted score has an intercept.
       if (order == 0L && cell == partitions - 1L) next
       cursor <- cursor + 1L
       result[, cursor] <- (bin == cell) * local^order
@@ -572,6 +580,8 @@ odrl_series_kernel <- function(
 }
 
 .odrl_series_row_tensor <- function(blocks) {
+  # Form every product of basis columns across the selected variables.
+  # Products are rowwise because each row describes one observation.
   result <- blocks[[1L]]
   if (length(blocks) == 1L) return(result)
   for (block in blocks[-1L]) {
@@ -594,6 +604,7 @@ odrl_series_kernel <- function(
 }
 
 .odrl_total_degree_indices <- function(p, degree) {
+  # List exponent vectors whose total degree is between 1 and degree.
   output <- list()
   recurse <- function(position, remaining, current) {
     if (position == p) {
@@ -650,6 +661,7 @@ odrl_series_kernel <- function(
 }
 
 .odrl_fit_series_map <- function(x, spec, candidate = list()) {
+  # Choose covariates and check the feature count before allocating the basis.
   x <- .odrl_series_matrix(x)
   spec <- .odrl_resolve_series_kernel(spec)
   candidate <- .odrl_series_candidate(spec, candidate)
@@ -660,6 +672,8 @@ odrl_series_kernel <- function(
   .odrl_series_guard_features(
     spec, candidate, length(variables), nrow(selected)
   )
+
+  # Learn bounds and any spline knots from these training rows only.
   bounds <- .odrl_series_bounds(selected, spec)
   domain <- .odrl_series_apply_bounds(
     selected, bounds, spec$extrapolation
@@ -675,6 +689,10 @@ odrl_series_kernel <- function(
   if (!is.matrix(raw) || !ncol(raw) || any(!is.finite(raw))) {
     .odrl_abort("The fitted series basis produced no finite features.")
   }
+
+  # Remove constant features, then center and optionally normalize each
+  # remaining column. The final sqrt(feature count) divisor sets the kernel
+  # scale. Save these quantities so prediction uses the identical map.
   center <- colMeans(raw)
   centered <- sweep(raw, 2L, center, "-")
   rms <- sqrt(colMeans(centered^2))
@@ -711,6 +729,7 @@ odrl_series_kernel <- function(
 }
 
 .odrl_apply_series_map <- function(map, newx, diagnostics = FALSE) {
+  # Apply the fitted basis without relearning bounds, knots, or scaling.
   if (!inherits(map, "odrl_series_map")) {
     .odrl_abort("`map` must be a fitted `odrl_series_map` object.")
   }
@@ -756,6 +775,8 @@ odrl_series_kernel <- function(
   loss_spec <- .odrl_resolve_surrogate_loss(loss)
   mapped <- .odrl_fit_series_map(x, spec, candidate)
   features <- mapped$features
+  # The sign of the residual score is the classification label; its magnitude
+  # is the cost of choosing the other treatment.
   label <- ifelse(score >= 0, 1, -1)
   score_scale <- mean(abs(score))
   weight <- if (is.finite(score_scale) && score_scale > 0) {
@@ -764,6 +785,8 @@ odrl_series_kernel <- function(
     rep(1, length(score))
   }
   n <- length(score)
+  # theta contains the intercept followed by one coefficient per feature.
+  # This kernel convention penalizes both the intercept and the coefficients.
   objective <- function(theta) {
     raw <- theta[[1L]] + drop(features %*% theta[-1L])
     margin <- label * raw
@@ -792,6 +815,7 @@ odrl_series_kernel <- function(
   )
   attempts <- 1L
   if (fit$convergence != 0L) {
+    # Continue from the current solution with a larger iteration budget.
     retry <- stats::optim(
       par = fit$par, fn = objective, gr = gradient, method = "L-BFGS-B",
       control = list(
